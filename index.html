@@ -179,6 +179,29 @@
   .card .opts { margin-top: 14px; display: flex; gap: 16px; justify-content: center; color: var(--muted); font-size: 15px; }
   .card label { cursor: pointer; display: flex; gap: 6px; align-items: center; }
   .newbest { color: var(--good); font-weight: 800; }
+  .namebox { margin: 4px 0 14px; }
+  .namebox input {
+    font: inherit; font-size: 18px; font-weight: 700; width: 100%; text-align: center; padding: 8px 12px;
+    border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); outline: none;
+    user-select: text; -webkit-user-select: text;
+  }
+  .namebox input:focus { border-color: var(--accent); }
+  .namebox.err input { border-color: #e5484d; animation: shake .3s; }
+  .namebox small { display: block; color: #e5484d; font-size: 14px; margin-top: 4px; }
+  .namebox small:empty { display: none; }
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  .tabs { display: flex; gap: 6px; justify-content: center; margin: 12px 0; }
+  .tabs button.on { background: var(--accent); color: #fff; border-color: transparent; }
+  .lb { list-style: none; margin: 0 0 16px; padding: 0; max-height: min(55vh, 420px); overflow: auto; text-align: left; }
+  .lb li { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 10px; font-weight: 700; }
+  .lb li:nth-child(odd) { background: var(--bg); }
+  .lb li .rk { width: 32px; text-align: center; color: var(--muted); }
+  .lb li .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb li .sc { color: var(--accent); font-size: 18px; }
+  .lb li.me { box-shadow: inset 0 0 0 2px var(--good); }
+  .lb li.msg { justify-content: center; color: var(--muted); font-weight: 500; background: none; }
+  #endRank { font-weight: 700; color: var(--ink); }
+  #endRank:empty { display: none; }
   .card.wide { max-width: 560px; max-height: calc(100vh - 32px); overflow: auto; text-align: left; }
   .card h2 { margin: 0; font-size: 28px; text-align: center; }
   .card h3 { margin: 14px 0 4px; font-size: 17px; }
@@ -229,6 +252,7 @@
   <div class="tools">
     <button id="hintBtn" title="Gợi ý (−10 giây ở chế độ Cổ điển)">💡 Gợi ý</button>
     <button id="shuffleBtn" title="Xáo trộn (−10 giây ở chế độ Cổ điển)">🔀 Xáo</button>
+    <button id="lbBtn" class="icon" title="Bảng xếp hạng">🏆</button>
     <button id="customBtn" class="icon" title="Tuỳ chỉnh hình quả">🎨</button>
     <button id="soundBtn" class="icon" title="Âm thanh">🔊</button>
     <button id="menuBtn" class="icon" title="Menu">☰</button>
@@ -247,6 +271,10 @@
       Mỗi quả xoá được = <b>1 điểm</b>.<br>
       Hết nước đi? Bàn sẽ <b>tự xáo trộn</b> các quả còn lại.</p>
     <div class="demo" id="demo"></div>
+    <div class="namebox" id="nameBox">
+      <input id="nameIn" maxlength="20" placeholder="Nhập tên của bạn để bắt đầu" autocomplete="nickname" enterkeyhint="go">
+      <small id="nameErr"></small>
+    </div>
     <div class="row">
       <button class="primary" data-mode="classic">⏱ Cổ điển · 2 phút</button>
       <button data-mode="zen">🌿 Thư giãn</button>
@@ -256,6 +284,7 @@
       <label><input type="checkbox" id="soundChk" checked> Âm thanh</label>
     </div>
     <div class="row" style="margin-top:12px">
+      <button id="lbBtn2">🏆 Bảng xếp hạng</button>
       <button id="customBtn2">🎨 Tuỳ chỉnh hình quả</button>
     </div>
   </div>
@@ -306,10 +335,24 @@
     <p id="endReason" style="margin-top:0">Hết giờ!</p>
     <div class="big" id="endScore">0</div>
     <p id="endInfo"></p>
+    <p id="endRank"></p>
     <div class="row">
       <button class="primary" id="againBtn">↻ Chơi lại</button>
+      <button id="lbBtn3">🏆 BXH</button>
       <button id="homeBtn">☰ Menu</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="lbOv">
+  <div class="card">
+    <h2>🏆 Bảng xếp hạng</h2>
+    <div class="tabs">
+      <button data-lb="classic">⏱ Cổ điển</button>
+      <button data-lb="zen">🌿 Thư giãn</button>
+    </div>
+    <ol class="lb" id="lbList"></ol>
+    <div class="row"><button class="primary" id="lbClose">Đóng</button></div>
   </div>
 </div>
 
@@ -317,6 +360,8 @@
 (() => {
   const TIME = 120, HINT_COST = 10, SHUFFLE_COST = 10;
   const $ = id => document.getElementById(id);
+  // Shared leaderboard (Supabase). Paste the project URL and anon/publishable key here — see supabase.sql
+  const SB_URL = 'https://cjosqwduvymukkbgahpi.supabase.co', SB_KEY = 'sb_publishable_8_4YcYAOgl16ywXbT3OqKA_jOKZFskg';
   const stage = $('stage'), board = $('board'), selbox = $('selbox'), selsum = selbox.querySelector('em');
 
   const store = {
@@ -339,6 +384,7 @@
   let drag = null, selected = [], hintCells = [];
   let soundOn = store.get('sound', true);
   let light = store.get('light', false);
+  let playerName = store.get('name', '');
 
   // ---------- Sound ----------
   let actx = null;
@@ -685,7 +731,7 @@
     makeGrid(); buildBoard(); renderTime();
     clearInterval(timer);
     if (mode === 'classic') timer = setInterval(() => {
-      if (!$('customOv').classList.contains('hidden')) return; // paused while customizing
+      if (document.querySelector('#customOv:not(.hidden), #lbOv:not(.hidden)')) return; // paused while a panel is open
       timeLeft -= 1; renderTime();
       if (timeLeft <= 10 && timeLeft > 0) sfx.warn();
       if (timeLeft <= 0) finish('time');
@@ -703,9 +749,77 @@
     $('endScore').textContent = score;
     $('endInfo').innerHTML = `Đã xoá ${score}/${total} quả (${Math.round(score / total * 100)}%)<br>` +
       (isBest ? '<span class="newbest">✨ Kỷ lục mới!</span>' : `Kỷ lục: ${prev}`);
+    submitScore(mode, score);
     sfx.end();
     setTimeout(() => $('endOv').classList.remove('hidden'), 400);
   }
+
+  // ---------- Leaderboard ----------
+  const lb = {
+    on: !!(SB_URL && SB_KEY),
+    async req(path, opts = {}) {
+      const r = await fetch(SB_URL.replace(/\/+$/, '') + '/rest/v1/' + path, {
+        ...opts,
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', ...opts.headers }
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const t = await r.text();
+      return t ? JSON.parse(t) : null;
+    },
+    top: (m, n = 100) => lb.req(`leaderboard?mode=eq.${m}&select=name,score&order=score.desc,created_at.asc&limit=${n}`),
+    add: (m, sc) => lb.req('scores', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ name: playerName, mode: m, score: sc }) })
+  };
+  const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  let lbMode = 'classic', lbReq = 0, endReq = 0;
+
+  async function submitScore(m, sc) {
+    const out = $('endRank'), id = ++endReq;
+    out.textContent = '';
+    if (!lb.on || !playerName || sc <= 0) return;
+    out.textContent = 'Đang lưu lên bảng xếp hạng…';
+    try {
+      await lb.add(m, sc);
+      const rows = await lb.top(m);
+      if (id !== endReq) return;
+      const i = rows.findIndex(x => sameName(x.name, playerName));
+      out.textContent = i >= 0 ? `🏆 ${playerName} đang xếp hạng #${i + 1}` : '✓ Đã lưu kết quả lên bảng xếp hạng';
+    } catch {
+      if (id === endReq) out.textContent = '⚠️ Không lưu được lên bảng xếp hạng (lỗi mạng)';
+    }
+  }
+
+  function lbMsg(text) {
+    $('lbList').innerHTML = '';
+    $('lbList').appendChild(Object.assign(document.createElement('li'), { className: 'msg', textContent: text }));
+  }
+
+  async function showLb(m) {
+    lbMode = m || lbMode;
+    document.querySelectorAll('[data-lb]').forEach(b => b.classList.toggle('on', b.dataset.lb === lbMode));
+    $('lbOv').classList.remove('hidden');
+    if (!lb.on) return lbMsg('Bảng xếp hạng chưa được cấu hình.');
+    lbMsg('Đang tải…');
+    const id = ++lbReq;
+    try {
+      const rows = await lb.top(lbMode, 50);
+      if (id !== lbReq) return;
+      if (!rows.length) return lbMsg('Chưa có ai trên bảng — hãy là người đầu tiên!');
+      const list = $('lbList'); list.innerHTML = '';
+      rows.forEach((x, i) => {
+        const li = document.createElement('li');
+        if (playerName && sameName(x.name, playerName)) li.className = 'me';
+        [['rk', ['🥇', '🥈', '🥉'][i] || i + 1], ['nm', x.name], ['sc', x.score]].forEach(([c, t]) =>
+          li.appendChild(Object.assign(document.createElement('span'), { className: c, textContent: t })));
+        list.appendChild(li);
+      });
+    } catch {
+      if (id === lbReq) lbMsg('Không tải được bảng xếp hạng. Kiểm tra mạng rồi thử lại.');
+    }
+  }
+
+  ['lbBtn', 'lbBtn2', 'lbBtn3'].forEach(id => $(id).onclick = () => { endDrag(false); showLb(running || id === 'lbBtn3' ? mode : null); });
+  document.querySelectorAll('[data-lb]').forEach(b => b.onclick = () => showLb(b.dataset.lb));
+  $('lbClose').onclick = () => $('lbOv').classList.add('hidden');
 
   // ---------- Input ----------
   stage.addEventListener('pointerdown', e => {
@@ -728,7 +842,21 @@
   $('menuBtn').onclick = () => { if (running) { running = false; clearInterval(timer); } $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
   $('againBtn').onclick = () => start();
   $('homeBtn').onclick = () => { $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
-  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => start(b.dataset.mode));
+  const nameIn = $('nameIn');
+  nameIn.value = playerName;
+  nameIn.oninput = () => { $('nameBox').classList.remove('err'); $('nameErr').textContent = ''; };
+  nameIn.onkeydown = e => { if (e.key === 'Enter') document.querySelector('[data-mode="classic"]').click(); };
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
+    const n = nameIn.value.replace(/\s+/g, ' ').trim().slice(0, 20);
+    if (!n) {
+      $('nameBox').classList.remove('err'); void nameIn.offsetWidth; $('nameBox').classList.add('err');
+      $('nameErr').textContent = 'Bạn cần nhập tên trước khi chơi';
+      nameIn.focus();
+      return;
+    }
+    playerName = nameIn.value = n; store.set('name', n);
+    start(b.dataset.mode);
+  });
 
   function applySettings() {
     document.documentElement.classList.toggle('light-tiles', light);

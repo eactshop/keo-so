@@ -126,6 +126,8 @@
   .tile.sel .fruit { transform: scale(1.1); box-shadow: 0 0 0 3px var(--sel), inset 0 -3px 0 rgba(0,0,0,.15); }
   .tile.hint .fruit { animation: pulse .8s ease-in-out infinite; }
   .tile.gone { visibility: hidden; }
+  #board.shuffling .tile:not(.fly) { transition: left .45s cubic-bezier(.5,0,.3,1.3), top .45s cubic-bezier(.5,0,.3,1.3); }
+  .popup.big { font-size: 34px; color: var(--accent); }
   @keyframes pulse { 50% { transform: scale(1.18); box-shadow: 0 0 0 4px var(--good); } }
 
   .fly {
@@ -226,6 +228,7 @@
   </div>
   <div class="tools">
     <button id="hintBtn" title="Gợi ý (−10 giây ở chế độ Cổ điển)">💡 Gợi ý</button>
+    <button id="shuffleBtn" title="Xáo trộn (−10 giây ở chế độ Cổ điển)">🔀 Xáo</button>
     <button id="customBtn" class="icon" title="Tuỳ chỉnh hình quả">🎨</button>
     <button id="soundBtn" class="icon" title="Âm thanh">🔊</button>
     <button id="menuBtn" class="icon" title="Menu">☰</button>
@@ -241,7 +244,8 @@
     <h1>Kéo Số <b>10</b></h1>
     <p>Kéo chuột (hoặc vuốt) để khoanh một <b>hình chữ nhật</b> các quả.<br>
       Nếu tổng các số bên trong <b>đúng bằng 10</b>, chúng sẽ biến mất.<br>
-      Mỗi quả xoá được = <b>1 điểm</b>.</p>
+      Mỗi quả xoá được = <b>1 điểm</b>.<br>
+      Hết nước đi? Bàn sẽ <b>tự xáo trộn</b> các quả còn lại.</p>
     <div class="demo" id="demo"></div>
     <div class="row">
       <button class="primary" data-mode="classic">⏱ Cổ điển · 2 phút</button>
@@ -311,7 +315,7 @@
 
 <script>
 (() => {
-  const TIME = 120, HINT_COST = 10;
+  const TIME = 120, HINT_COST = 10, SHUFFLE_COST = 10;
   const $ = id => document.getElementById(id);
   const stage = $('stage'), board = $('board'), selbox = $('selbox'), selsum = selbox.querySelector('em');
 
@@ -354,7 +358,8 @@
     clear: n => { for (let i = 0; i < Math.min(n, 6); i++) tone(520 + i * 120, .12, 'sine', .14, i * .05); },
     bad: () => tone(180, .12, 'square', .05),
     end: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, .25, 'triangle', .12, i * .12)),
-    warn: () => tone(880, .06, 'square', .05)
+    warn: () => tone(880, .06, 'square', .05),
+    shuffle: () => [392, 494, 587, 494, 659].forEach((f, i) => tone(f, .09, 'triangle', .1, i * .06))
   };
 
   // ---------- Grid ----------
@@ -577,7 +582,46 @@
     p.className = 'popup'; p.textContent = '+' + cells.length;
     p.style.left = cx / cells.length + cell / 2 + 'px'; p.style.top = cy / cells.length + cell / 2 + 'px';
     board.appendChild(p); setTimeout(() => p.remove(), 900);
-    if (!findMove()) setTimeout(() => finish(grid.flat().every(v => !v) ? 'perfect' : 'stuck'), 700);
+    if (!findMove()) setTimeout(() => {
+      if (!running) return;
+      if (grid.flat().every(v => !v)) finish('perfect');
+      else if (!shuffle()) finish('stuck');
+    }, 700);
+  }
+
+  // ---------- Shuffle: permute the remaining fruits among the occupied cells ----------
+  // Retries until the new layout has at least one move; returns false if none was found.
+  function shuffle() {
+    const pos = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (grid[r][c]) pos.push([r, c]);
+    const vals = pos.map(([r, c]) => grid[r][c]), els = pos.map(([r, c]) => tiles[r][c]);
+    const perm = pos.map((_, i) => i);
+    let ok = false;
+    for (let tries = 0; tries < 300 && !ok; tries++) {
+      for (let i = perm.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+      pos.forEach(([r, c], i) => { grid[r][c] = vals[perm[i]]; });
+      ok = !!findMove();
+    }
+    if (!ok) { pos.forEach(([r, c], i) => { grid[r][c] = vals[i]; }); return false; }
+    endDrag(false); clearHint();
+    // Swap the tile elements themselves so they slide to their new cells
+    pos.forEach(([r, c], i) => { tiles[r][c] = els[perm[i]]; });
+    board.classList.add('shuffling');
+    layout();
+    clearTimeout(shuffle.t);
+    shuffle.t = setTimeout(() => board.classList.remove('shuffling'), 500);
+    sfx.shuffle();
+    const p = document.createElement('div');
+    p.className = 'popup big'; p.textContent = '🔀 Xáo trộn!';
+    p.style.left = board.clientWidth / 2 + 'px'; p.style.top = board.clientHeight / 2 + 'px';
+    board.appendChild(p); setTimeout(() => p.remove(), 900);
+    return true;
+  }
+
+  function manualShuffle() {
+    if (!running) return;
+    if (!shuffle()) return finish('stuck');
+    if (mode === 'classic') { timeLeft = Math.max(1, timeLeft - SHUFFLE_COST); renderTime(); }
   }
 
   // ---------- Hint / move search (2D prefix sums) ----------
@@ -636,6 +680,7 @@
     $('best').textContent = store.get('best-' + mode, 0);
     $('timeLabel').textContent = mode === 'zen' ? 'Thư giãn' : 'Thời gian';
     $('hintBtn').title = mode === 'zen' ? 'Gợi ý' : `Gợi ý (−${HINT_COST} giây)`;
+    $('shuffleBtn').title = mode === 'zen' ? 'Xáo trộn' : `Xáo trộn (−${SHUFFLE_COST} giây)`;
     $('startOv').classList.add('hidden'); $('endOv').classList.add('hidden');
     makeGrid(); buildBoard(); renderTime();
     clearInterval(timer);
@@ -679,6 +724,7 @@
   window.addEventListener('resize', layout);
 
   $('hintBtn').onclick = hint;
+  $('shuffleBtn').onclick = manualShuffle;
   $('menuBtn').onclick = () => { if (running) { running = false; clearInterval(timer); } $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
   $('againBtn').onclick = () => start();
   $('homeBtn').onclick = () => { $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };

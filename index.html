@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Kéo Số 10</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fff8ee;
+    --bg2: #ffeccc;
+    --panel: #ffffff;
+    --ink: #3b2a1a;
+    --muted: #8a7461;
+    --line: #f0dcc0;
+    --accent: #ff6b3d;
+    --good: #2bb673;
+    --warn: #ffb020;
+    --tile-a: #ff5a4e;
+    --tile-b: #d92e2e;
+    --tile-ink: #ffffff;
+    --leaf: #3fae5a;
+    --sel: #ffd84d;
+    --shadow: 0 6px 20px rgba(120, 70, 20, .12);
+  }
+  :root.light-tiles { --tile-a: #ffb3a7; --tile-b: #ff8c7d; --tile-ink: #5a1f15; --leaf: #8fd39e; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1612; --bg2: #2a1f17; --panel: #2b221b; --ink: #f7ead9; --muted: #b59c84;
+      --line: #43352a; --shadow: 0 6px 20px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1612; --bg2: #2a1f17; --panel: #2b221b; --ink: #f7ead9; --muted: #b59c84;
+    --line: #43352a; --shadow: 0 6px 20px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Baloo 2", system-ui, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(circle at 20% 0%, var(--bg2), var(--bg) 60%);
+    background-color: var(--bg);
+    overflow: hidden;
+    user-select: none; -webkit-user-select: none;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px; justify-content: space-between;
+  }
+  .brand { font-weight: 800; font-size: 24px; letter-spacing: .5px; display: flex; align-items: center; gap: 8px; }
+  .brand b { color: var(--accent); }
+  .stats { display: flex; gap: 8px; align-items: center; }
+  .stat {
+    background: var(--panel); border: 2px solid var(--line); border-radius: 14px;
+    padding: 2px 12px; min-width: 70px; text-align: center; box-shadow: var(--shadow);
+  }
+  .stat small { display: block; font-size: 11px; color: var(--muted); line-height: 1.2; text-transform: uppercase; letter-spacing: .5px; }
+  .stat span { font-size: 22px; font-weight: 800; line-height: 1.1; }
+  .tools { display: flex; gap: 6px; }
+  button {
+    font: inherit; font-weight: 700; cursor: pointer; color: var(--ink);
+    background: var(--panel); border: 2px solid var(--line); border-radius: 12px;
+    padding: 6px 12px; box-shadow: var(--shadow); transition: transform .1s;
+  }
+  button:active { transform: scale(.95); }
+  button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  button.icon { width: 40px; padding: 6px 0; }
+  .timebar { height: 10px; margin: 0 16px; background: var(--line); border-radius: 99px; overflow: hidden; }
+  .timebar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--good), #8ee06a); border-radius: 99px; transition: width .25s linear, background .3s; }
+  .timebar.low i { background: linear-gradient(90deg, #ff3b3b, var(--warn)); }
+  .timebar.hidden { visibility: hidden; }
+
+  #stage {
+    flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+    touch-action: none; min-height: 0;
+  }
+  #bgLayer {
+    position: fixed; inset: -40px; z-index: -1; pointer-events: none;
+    background: center / cover no-repeat; display: none;
+  }
+  #bgLayer::after { content: ""; position: absolute; inset: 0; background: var(--bg); opacity: var(--dim, .3); }
+  :root.has-bg #bgLayer { display: block; }
+  :root.has-bg .brand { background: var(--panel); padding: 0 12px; border-radius: 14px; box-shadow: var(--shadow); }
+  #board {
+    --board-alpha: 100%;
+    position: relative; background: color-mix(in srgb, var(--panel) var(--board-alpha), transparent); border-radius: 18px;
+    border: 3px solid var(--line); box-shadow: var(--shadow);
+  }
+  .tile {
+    position: absolute; width: var(--cell); height: var(--cell);
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .tile .fruit {
+    width: 86%; height: 86%; border-radius: 50% 50% 46% 46%;
+    background: radial-gradient(circle at 32% 28%, rgba(255,255,255,.55) 0 12%, transparent 13%),
+                linear-gradient(160deg, var(--tile-a), var(--tile-b));
+    color: var(--tile-ink); font-weight: 800; font-size: calc(var(--cell) * .48);
+    display: flex; align-items: center; justify-content: center; position: relative;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.15);
+    transition: transform .12s, box-shadow .12s;
+    padding-top: 6%;
+  }
+  .tile .fruit::before {
+    content: ""; position: absolute; top: -8%; left: 52%; width: 26%; height: 18%;
+    background: var(--leaf); border-radius: 0 80% 0 80%; transform: rotate(-15deg);
+  }
+  .tile .fruit span { line-height: 1; position: relative; }
+  .tile .fruit.custom {
+    background: var(--img) center / contain no-repeat; box-shadow: none; padding: 0 0 6%;
+    align-items: flex-end; color: #5b1f12; font-size: calc(var(--cell) * .42);
+  }
+  .tile .fruit.custom.nonum { width: 100%; height: 100%; }
+  .tile .fruit.custom span {
+    text-shadow: 2px 0 #ffe3db, -2px 0 #ffe3db, 0 2px #ffe3db, 0 -2px #ffe3db,
+      1.5px 1.5px #ffe3db, -1.5px -1.5px #ffe3db, 1.5px -1.5px #ffe3db, -1.5px 1.5px #ffe3db;
+  }
+  .tile .fruit.custom::before { display: none; }
+  .tile .fruit.custom.nonum span { visibility: hidden; }
+  :root.num-center .tile .fruit.custom { align-items: center; padding: 0; }
+  :root.round-crop .tile .fruit.custom { border-radius: 50%; background-size: cover; }
+  .tile.sel .fruit.custom { border-radius: 50%; box-shadow: 0 0 0 3px var(--sel); }
+  .tile.sel .fruit { transform: scale(1.1); box-shadow: 0 0 0 3px var(--sel), inset 0 -3px 0 rgba(0,0,0,.15); }
+  .tile.hint .fruit { animation: pulse .8s ease-in-out infinite; }
+  .tile.gone { visibility: hidden; }
+  @keyframes pulse { 50% { transform: scale(1.18); box-shadow: 0 0 0 4px var(--good); } }
+
+  .fly {
+    position: absolute; pointer-events: none; z-index: 5;
+    animation: fly .9s cubic-bezier(.3,.0,.7,1) forwards;
+  }
+  @keyframes fly {
+    0% { transform: translate(0,0) rotate(0) scale(1.1); opacity: 1; }
+    25% { transform: translate(calc(var(--dx) * .3), -40px) rotate(calc(var(--rot) * .3)) scale(1.15); }
+    100% { transform: translate(var(--dx), 260px) rotate(var(--rot)) scale(.7); opacity: 0; }
+  }
+
+  #selbox {
+    position: absolute; border: 3px dashed var(--accent); border-radius: 10px;
+    background: rgba(255, 107, 61, .08); pointer-events: none; display: none; z-index: 4;
+  }
+  #selbox.ok { border-style: solid; border-color: var(--good); background: rgba(43, 182, 115, .15); }
+  #selbox em {
+    position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #fff; font-style: normal; font-weight: 800;
+    padding: 0 10px; border-radius: 99px; font-size: 18px; white-space: nowrap;
+  }
+  #selbox.ok em { background: var(--good); }
+
+  .popup {
+    position: absolute; z-index: 6; pointer-events: none; font-weight: 800; font-size: 26px;
+    color: var(--good); text-shadow: 0 2px 0 var(--panel); animation: up .9s ease-out forwards;
+    transform: translate(-50%, -50%);
+  }
+  @keyframes up { to { transform: translate(-50%, -140%); opacity: 0; } }
+
+  .overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(40, 25, 10, .45); backdrop-filter: blur(3px); z-index: 20; padding: 16px;
+  }
+  .overlay.hidden { display: none; }
+  .card {
+    background: var(--panel); border-radius: 24px; padding: 24px; max-width: 420px; width: 100%;
+    text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.3); border: 3px solid var(--line);
+  }
+  .card h1 { margin: 0; font-size: 40px; line-height: 1.1; }
+  .card h1 b { color: var(--accent); }
+  .card p { color: var(--muted); margin: 8px 0 16px; line-height: 1.45; }
+  .card .demo { display: flex; justify-content: center; gap: 6px; margin: 12px 0; --cell: 44px; }
+  .card .demo .tile { position: relative; }
+  .card .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .card .row button { padding: 10px 16px; font-size: 17px; }
+  .card .big { font-size: 64px; font-weight: 800; color: var(--accent); line-height: 1; }
+  .card .opts { margin-top: 14px; display: flex; gap: 16px; justify-content: center; color: var(--muted); font-size: 15px; }
+  .card label { cursor: pointer; display: flex; gap: 6px; align-items: center; }
+  .newbest { color: var(--good); font-weight: 800; }
+  .card.wide { max-width: 560px; max-height: calc(100vh - 32px); overflow: auto; text-align: left; }
+  .card h2 { margin: 0; font-size: 28px; text-align: center; }
+  .card h3 { margin: 14px 0 4px; font-size: 17px; }
+  .card h3 small { color: var(--muted); font-weight: 500; font-size: 13px; }
+  .card.wide p { margin: 4px 0 8px; text-align: center; font-size: 14px; }
+  .slots { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 6px; }
+  .slot {
+    width: 58px; height: 58px; border: 2px dashed var(--line); border-radius: 14px; position: relative;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 800;
+    font-size: 22px; color: var(--muted); background: var(--bg) center / contain no-repeat;
+  }
+  .slot:hover { border-color: var(--accent); }
+  .slot.has { border-style: solid; color: transparent; }
+  .slot .n {
+    position: absolute; left: -6px; bottom: -6px; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ink); color: var(--panel); font-size: 13px; line-height: 22px; text-align: center;
+  }
+  .slot .x {
+    position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 12px; line-height: 22px; text-align: center;
+  }
+  .copts { display: grid; gap: 8px; margin: 14px 0 6px; color: var(--ink); font-size: 15px; }
+  .copts select { font: inherit; border-radius: 8px; border: 2px solid var(--line); background: var(--panel); color: var(--ink); padding: 0 6px; }
+  .slot.bg { width: 140px; height: 84px; background-size: cover; }
+  .copts input[type=range] { width: 100%; accent-color: var(--accent); }
+  .copts.hidden { display: none; }
+  #customDemo { background: var(--bg); border-radius: 14px; padding: 8px; margin: 10px 0 14px; }
+  .card .row.end { justify-content: space-between; }
+
+  @media (max-width: 560px) {
+    header { padding: 8px 12px; gap: 8px; }
+    .brand { font-size: 20px; }
+    .stat { min-width: 56px; padding: 2px 8px; }
+    .stat span { font-size: 18px; }
+    .timebar { margin: 0 12px; }
+  }
+</style>
+</head>
+<body>
+<div id="bgLayer"></div>
+<header>
+  <div class="brand">🍎 Kéo Số <b>10</b></div>
+  <div class="stats">
+    <div class="stat"><small>Điểm</small><span id="score">0</span></div>
+    <div class="stat"><small id="timeLabel">Thời gian</small><span id="time">120</span></div>
+    <div class="stat"><small>Kỷ lục</small><span id="best">0</span></div>
+  </div>
+  <div class="tools">
+    <button id="hintBtn" title="Gợi ý (−10 giây ở chế độ Cổ điển)">💡 Gợi ý</button>
+    <button id="customBtn" class="icon" title="Tuỳ chỉnh hình quả">🎨</button>
+    <button id="soundBtn" class="icon" title="Âm thanh">🔊</button>
+    <button id="menuBtn" class="icon" title="Menu">☰</button>
+  </div>
+</header>
+<div class="timebar" id="timebar"><i></i></div>
+<div id="stage">
+  <div id="board"><div id="selbox"><em>0</em></div></div>
+</div>
+
+<div class="overlay" id="startOv">
+  <div class="card">
+    <h1>Kéo Số <b>10</b></h1>
+    <p>Kéo chuột (hoặc vuốt) để khoanh một <b>hình chữ nhật</b> các quả.<br>
+      Nếu tổng các số bên trong <b>đúng bằng 10</b>, chúng sẽ biến mất.<br>
+      Mỗi quả xoá được = <b>1 điểm</b>.</p>
+    <div class="demo" id="demo"></div>
+    <div class="row">
+      <button class="primary" data-mode="classic">⏱ Cổ điển · 2 phút</button>
+      <button data-mode="zen">🌿 Thư giãn</button>
+    </div>
+    <div class="opts">
+      <label><input type="checkbox" id="lightChk"> Màu nhạt</label>
+      <label><input type="checkbox" id="soundChk" checked> Âm thanh</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="customBtn2">🎨 Tuỳ chỉnh hình quả</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="customOv">
+  <div class="card wide">
+    <h2>🎨 Tuỳ chỉnh quả</h2>
+    <p>Tải ảnh lên để thay hình quả. Ảnh PNG nền trong suốt sẽ đẹp nhất; ảnh nền trắng có thể tự xoá nền.</p>
+
+    <h3>Ảnh nền <small>— thay hình nền phía sau bàn chơi</small></h3>
+    <div class="slots" id="bgSlot"></div>
+    <div class="copts" id="bgOpts">
+      <label>Làm mờ ảnh nền <input type="range" id="bgBlur" min="0" max="20" step="1"></label>
+      <label>Phủ màu lên nền (cho dễ nhìn) <input type="range" id="bgDim" min="0" max="90" step="5"></label>
+      <label>Độ đục của bàn chơi <input type="range" id="boardAlpha" min="0" max="100" step="5"></label>
+    </div>
+
+    <h3>Ảnh chung <small>— chọn được nhiều ảnh, mỗi quả lấy ngẫu nhiên một ảnh</small></h3>
+    <div class="slots" id="poolSlots"></div>
+
+    <h3>Ảnh riêng theo số <small>— ưu tiên hơn ảnh chung</small></h3>
+    <div class="slots" id="numSlots"></div>
+
+    <div class="copts">
+      <label>Vị trí số trên quả:
+        <select id="numPos"><option value="bottom">Phía dưới</option><option value="center">Ở giữa</option></select>
+      </label>
+      <label><input type="checkbox" id="roundChk"> Cắt ảnh thành hình tròn</label>
+      <label><input type="checkbox" id="bgChk"> Tự xoá nền trắng khi tải ảnh lên</label>
+      <label><input type="checkbox" id="hideNumChk"> Ảnh theo số đã vẽ sẵn số → ẩn số của game</label>
+    </div>
+
+    <div class="demo" id="customDemo"></div>
+    <div class="row end">
+      <span class="row">
+        <button id="customReset">↺ Khôi phục mặc định</button>
+        <button id="customPlain">🍎 Dùng táo trơn</button>
+      </span>
+      <button class="primary" id="customDone">Xong</button>
+    </div>
+    <input type="file" id="fileIn" accept="image/*" hidden>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOv">
+  <div class="card">
+    <p id="endReason" style="margin-top:0">Hết giờ!</p>
+    <div class="big" id="endScore">0</div>
+    <p id="endInfo"></p>
+    <div class="row">
+      <button class="primary" id="againBtn">↻ Chơi lại</button>
+      <button id="homeBtn">☰ Menu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const TIME = 120, HINT_COST = 10;
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), board = $('board'), selbox = $('selbox'), selsum = selbox.querySelector('em');
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('keoso10:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('keoso10:' + k, JSON.stringify(v)); return true; } catch { return false; } }
+  };
+  const MAX_POOL = 12;
+  // Default skin: per-number fruit art (numbers already drawn in) + cover photo, from ./assets
+  const DEFAULT_PER = Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map(v => [v, `assets/qua-${v}.webp`]));
+  const DEFAULT_BG = 'assets/bia.jpg';
+  const defaultSkin = () => ({ pool: [], per: { ...DEFAULT_PER }, bg: DEFAULT_BG, hideNum: true });
+  let custom = Object.assign({
+    numPos: 'bottom', round: false, removeBg: true,
+    bgBlur: 0, bgDim: 25, boardAlpha: 70
+  }, defaultSkin(), store.get('custom2', {}));
+
+  let rows = 10, cols = 17, cell = 40, pad = 10;
+  let grid = [], tiles = [];
+  let mode = 'classic', score = 0, timeLeft = TIME, timer = null, running = false;
+  let drag = null, selected = [], hintCells = [];
+  let soundOn = store.get('sound', true);
+  let light = store.get('light', false);
+
+  // ---------- Sound ----------
+  let actx = null;
+  function tone(freq, dur = .08, type = 'sine', vol = .15, delay = 0) {
+    if (!soundOn) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const t = actx.currentTime + delay;
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+    } catch {}
+  }
+  const sfx = {
+    tick: () => tone(660, .04, 'triangle', .05),
+    clear: n => { for (let i = 0; i < Math.min(n, 6); i++) tone(520 + i * 120, .12, 'sine', .14, i * .05); },
+    bad: () => tone(180, .12, 'square', .05),
+    end: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, .25, 'triangle', .12, i * .12)),
+    warn: () => tone(880, .06, 'square', .05)
+  };
+
+  // ---------- Grid ----------
+  function makeGrid() {
+    grid = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 1 + Math.floor(Math.random() * 9)));
+    // Make the total a multiple of 10 (like the original) so a perfect clear is theoretically possible
+    let total = grid.flat().reduce((a, b) => a + b, 0);
+    while (total % 10) {
+      const r = Math.floor(Math.random() * rows), c = Math.floor(Math.random() * cols);
+      const need = total % 10, v = grid[r][c];
+      if (v - need >= 1) { grid[r][c] -= need; total -= need; }
+      else if (v + (10 - need) <= 9) { grid[r][c] += 10 - need; total += 10 - need; }
+    }
+  }
+
+  function fruitEl(v) {
+    const t = document.createElement('div');
+    t.className = 'tile';
+    t.innerHTML = `<div class="fruit"><span>${v}</span></div>`;
+    paintFruit(t.firstChild, v);
+    return t;
+  }
+
+  // Custom images live in CSS variables (--num-N / --pool-i) so each tile only references them
+  function paintFruit(f, v) {
+    f.classList.remove('custom', 'nonum');
+    f.style.removeProperty('--img');
+    const n = custom.pool.length;
+    if (custom.per[v]) {
+      f.classList.add('custom');
+      f.classList.toggle('nonum', custom.hideNum);
+      f.style.setProperty('--img', `var(--num-${v})`);
+    } else if (n) {
+      let i = +f.dataset.pi;
+      if (!(i < n)) f.dataset.pi = i = Math.floor(Math.random() * n);
+      f.classList.add('custom');
+      f.style.setProperty('--img', `var(--pool-${i})`);
+    }
+  }
+
+  function applyCustom() {
+    const root = document.documentElement;
+    for (let i = 0; i < MAX_POOL; i++)
+      root.style.setProperty('--pool-' + i, custom.pool[i] ? `url("${custom.pool[i]}")` : 'none');
+    for (let v = 1; v <= 9; v++)
+      root.style.setProperty('--num-' + v, custom.per[v] ? `url("${custom.per[v]}")` : 'none');
+    root.classList.toggle('num-center', custom.numPos === 'center');
+    root.classList.toggle('round-crop', custom.round);
+    tiles.forEach((row, r) => row.forEach((t, c) => { if (grid[r][c]) paintFruit(t.firstChild, grid[r][c]); }));
+    renderDemo($('demo')); renderDemo($('customDemo'), true);
+    applyBg();
+  }
+
+  function applyBg() {
+    const layer = $('bgLayer');
+    document.documentElement.classList.toggle('has-bg', !!custom.bg);
+    layer.style.backgroundImage = custom.bg ? `url("${custom.bg}")` : 'none';
+    layer.style.filter = custom.bgBlur ? `blur(${custom.bgBlur}px)` : '';
+    layer.style.setProperty('--dim', custom.bgDim / 100);
+    board.style.setProperty('--board-alpha', (custom.bg ? custom.boardAlpha : 100) + '%');
+  }
+
+  // Background photos: keep them reasonably small so they fit in localStorage
+  function processBg(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const s = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const cv = Object.assign(document.createElement('canvas'), {
+          width: Math.max(1, Math.round(img.width * s)), height: Math.max(1, Math.round(img.height * s))
+        });
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        resolve(cv.toDataURL('image/jpeg', .8));
+      };
+      img.src = url;
+    });
+  }
+
+  function renderDemo(el, all) {
+    el.innerHTML = '';
+    const nums = all ? [1, 2, 3, 4, 5, 6, 7, 8, 9] : [3, 7];
+    nums.forEach(v => el.appendChild(fruitEl(v)));
+    if (!all) el.appendChild(Object.assign(document.createElement('div'), {
+      textContent: '= 10 ✓', style: 'align-self:center;font-weight:800;font-size:22px;color:var(--good)'
+    }));
+    el.style.flexWrap = 'wrap';
+  }
+
+  // Shrink, optionally strip the white background (flood fill from edges), trim to content
+  function processImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const s = Math.min(1, 320 / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * s)), h = Math.max(1, Math.round(img.height * s));
+        const cv = Object.assign(document.createElement('canvas'), { width: w, height: h });
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const d = ctx.getImageData(0, 0, w, h), p = d.data;
+        if (custom.removeBg) {
+          const seen = new Uint8Array(w * h), st = [];
+          const bg = i => p[i * 4 + 3] < 10 || (p[i * 4] > 232 && p[i * 4 + 1] > 232 && p[i * 4 + 2] > 232);
+          for (let x = 0; x < w; x++) st.push(x, (h - 1) * w + x);
+          for (let y = 0; y < h; y++) st.push(y * w, y * w + w - 1);
+          while (st.length) {
+            const i = st.pop();
+            if (seen[i]) continue;
+            seen[i] = 1;
+            if (!bg(i)) continue;
+            p[i * 4 + 3] = 0;
+            const x = i % w, y = (i / w) | 0;
+            if (x > 0) st.push(i - 1);
+            if (x < w - 1) st.push(i + 1);
+            if (y > 0) st.push(i - w);
+            if (y < h - 1) st.push(i + w);
+          }
+          ctx.putImageData(d, 0, 0);
+        }
+        let x1 = w, y1 = h, x2 = -1, y2 = -1;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (p[(y * w + x) * 4 + 3] > 10) {
+          if (x < x1) x1 = x; if (x > x2) x2 = x; if (y < y1) y1 = y; if (y > y2) y2 = y;
+        }
+        if (x2 < 0) { x1 = 0; y1 = 0; x2 = w - 1; y2 = h - 1; }
+        const bw = x2 - x1 + 1, bh = y2 - y1 + 1, k = Math.min(1, 200 / Math.max(bw, bh));
+        const out = Object.assign(document.createElement('canvas'), { width: Math.round(bw * k), height: Math.round(bh * k) });
+        out.getContext('2d').drawImage(cv, x1, y1, bw, bh, 0, 0, out.width, out.height);
+        let data = out.toDataURL('image/webp', .85);
+        if (!data.startsWith('data:image/webp')) data = out.toDataURL('image/png');
+        resolve(data);
+      };
+      img.src = url;
+    });
+  }
+
+  function buildBoard() {
+    board.querySelectorAll('.tile,.fly,.popup').forEach(e => e.remove());
+    tiles = grid.map(row => row.map(v => { const t = fruitEl(v); board.appendChild(t); return t; }));
+    layout();
+  }
+
+  function layout() {
+    const sw = stage.clientWidth - 24, sh = stage.clientHeight - 24;
+    cell = Math.max(18, Math.min(60, Math.floor(Math.min((sw - pad * 2) / cols, (sh - pad * 2) / rows))));
+    document.documentElement.style.setProperty('--cell', cell + 'px');
+    board.style.width = cols * cell + pad * 2 + 'px';
+    board.style.height = rows * cell + pad * 2 + 'px';
+    tiles.forEach((row, r) => row.forEach((t, c) => { t.style.left = pad + c * cell + 'px'; t.style.top = pad + r * cell + 'px'; }));
+  }
+
+  // ---------- Selection ----------
+  function boardPoint(e) {
+    const b = board.getBoundingClientRect();
+    return { x: e.clientX - b.left - 3 - pad, y: e.clientY - b.top - 3 - pad };
+  }
+
+  function cellsInRect(a, b) {
+    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+    // A fruit is selected when its center lies inside the rectangle
+    const c1 = Math.max(0, Math.ceil(x1 / cell - .5)), c2 = Math.min(cols - 1, Math.floor(x2 / cell - .5));
+    const r1 = Math.max(0, Math.ceil(y1 / cell - .5)), r2 = Math.min(rows - 1, Math.floor(y2 / cell - .5));
+    const out = [];
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if (grid[r][c]) out.push([r, c]);
+    return out;
+  }
+
+  function updateSelection() {
+    const { a, b } = drag;
+    const x = Math.min(a.x, b.x) + pad, y = Math.min(a.y, b.y) + pad;
+    Object.assign(selbox.style, {
+      display: 'block', left: x + 'px', top: y + 'px',
+      width: Math.abs(a.x - b.x) + 'px', height: Math.abs(a.y - b.y) + 'px'
+    });
+    const next = cellsInRect(a, b);
+    if (next.length !== selected.length || next.some(([r, c], i) => selected[i][0] !== r || selected[i][1] !== c)) {
+      selected.forEach(([r, c]) => tiles[r][c].classList.remove('sel'));
+      next.forEach(([r, c]) => tiles[r][c].classList.add('sel'));
+      if (next.length > selected.length) sfx.tick();
+      selected = next;
+    }
+    const sum = selected.reduce((s, [r, c]) => s + grid[r][c], 0);
+    selsum.textContent = sum;
+    selsum.style.display = selected.length ? '' : 'none';
+    selbox.classList.toggle('ok', sum === 10);
+  }
+
+  function endDrag(commit) {
+    if (!drag) return;
+    const sum = selected.reduce((s, [r, c]) => s + grid[r][c], 0);
+    selected.forEach(([r, c]) => tiles[r][c].classList.remove('sel'));
+    if (commit && sum === 10) clearCells(selected);
+    else if (commit && selected.length > 1) sfx.bad();
+    selected = []; drag = null; selbox.style.display = 'none'; selbox.classList.remove('ok');
+  }
+
+  function clearCells(cells) {
+    clearHint();
+    let cx = 0, cy = 0;
+    cells.forEach(([r, c], i) => {
+      const t = tiles[r][c];
+      const f = t.cloneNode(true);
+      f.className = 'tile fly';
+      f.style.left = t.style.left; f.style.top = t.style.top;
+      f.style.setProperty('--dx', (Math.random() * 160 - 80) + 'px');
+      f.style.setProperty('--rot', (Math.random() * 540 - 270) + 'deg');
+      f.style.animationDelay = i * 30 + 'ms';
+      board.appendChild(f);
+      setTimeout(() => f.remove(), 1000 + i * 30);
+      t.classList.add('gone');
+      grid[r][c] = 0;
+      cx += parseFloat(t.style.left); cy += parseFloat(t.style.top);
+    });
+    score += cells.length;
+    $('score').textContent = score;
+    sfx.clear(cells.length);
+    const p = document.createElement('div');
+    p.className = 'popup'; p.textContent = '+' + cells.length;
+    p.style.left = cx / cells.length + cell / 2 + 'px'; p.style.top = cy / cells.length + cell / 2 + 'px';
+    board.appendChild(p); setTimeout(() => p.remove(), 900);
+    if (!findMove()) setTimeout(() => finish(grid.flat().every(v => !v) ? 'perfect' : 'stuck'), 700);
+  }
+
+  // ---------- Hint / move search (2D prefix sums) ----------
+  function findMove() {
+    const P = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(0));
+    const N = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(0));
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      P[r + 1][c + 1] = grid[r][c] + P[r][c + 1] + P[r + 1][c] - P[r][c];
+      N[r + 1][c + 1] = (grid[r][c] ? 1 : 0) + N[r][c + 1] + N[r + 1][c] - N[r][c];
+    }
+    const q = (A, r1, c1, r2, c2) => A[r2 + 1][c2 + 1] - A[r1][c2 + 1] - A[r2 + 1][c1] + A[r1][c1];
+    let best = null;
+    for (let r1 = 0; r1 < rows; r1++) for (let c1 = 0; c1 < cols; c1++)
+      for (let r2 = r1; r2 < rows; r2++) {
+        if (q(P, r1, c1, r2, c1) > 10) break;
+        for (let c2 = c1; c2 < cols; c2++) {
+          const s = q(P, r1, c1, r2, c2);
+          if (s > 10) break;
+          if (s === 10) {
+            const n = q(N, r1, c1, r2, c2);
+            if (!best || n < best.n) best = { r1, c1, r2, c2, n };
+          }
+        }
+      }
+    return best;
+  }
+
+  function clearHint() { hintCells.forEach(t => t.classList.remove('hint')); hintCells = []; }
+
+  function hint() {
+    if (!running) return;
+    clearHint();
+    const m = findMove();
+    if (!m) return;
+    for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++)
+      if (grid[r][c]) { tiles[r][c].classList.add('hint'); hintCells.push(tiles[r][c]); }
+    if (mode === 'classic') { timeLeft = Math.max(1, timeLeft - HINT_COST); renderTime(); }
+  }
+
+  // ---------- Game flow ----------
+  function renderTime() {
+    const bar = $('timebar');
+    if (mode === 'zen') { $('time').textContent = '∞'; bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    $('time').textContent = Math.ceil(timeLeft);
+    bar.querySelector('i').style.width = (timeLeft / TIME * 100) + '%';
+    bar.classList.toggle('low', timeLeft <= 20);
+  }
+
+  function start(m) {
+    mode = m || mode;
+    const portrait = stage.clientHeight > stage.clientWidth * 1.1;
+    [rows, cols] = portrait ? [17, 10] : [10, 17];
+    score = 0; timeLeft = TIME; running = true;
+    $('score').textContent = 0;
+    $('best').textContent = store.get('best-' + mode, 0);
+    $('timeLabel').textContent = mode === 'zen' ? 'Thư giãn' : 'Thời gian';
+    $('hintBtn').title = mode === 'zen' ? 'Gợi ý' : `Gợi ý (−${HINT_COST} giây)`;
+    $('startOv').classList.add('hidden'); $('endOv').classList.add('hidden');
+    makeGrid(); buildBoard(); renderTime();
+    clearInterval(timer);
+    if (mode === 'classic') timer = setInterval(() => {
+      if (!$('customOv').classList.contains('hidden')) return; // paused while customizing
+      timeLeft -= 1; renderTime();
+      if (timeLeft <= 10 && timeLeft > 0) sfx.warn();
+      if (timeLeft <= 0) finish('time');
+    }, 1000);
+  }
+
+  function finish(reason) {
+    if (!running) return;
+    running = false; clearInterval(timer); endDrag(false); clearHint();
+    const key = 'best-' + mode, prev = store.get(key, 0), total = rows * cols;
+    const isBest = score > prev;
+    if (isBest) store.set(key, score);
+    $('best').textContent = Math.max(prev, score);
+    $('endReason').textContent = { time: '⏰ Hết giờ!', stuck: '🤔 Hết nước đi!', perfect: '🏆 Dọn sạch bàn!' }[reason];
+    $('endScore').textContent = score;
+    $('endInfo').innerHTML = `Đã xoá ${score}/${total} quả (${Math.round(score / total * 100)}%)<br>` +
+      (isBest ? '<span class="newbest">✨ Kỷ lục mới!</span>' : `Kỷ lục: ${prev}`);
+    sfx.end();
+    setTimeout(() => $('endOv').classList.remove('hidden'), 400);
+  }
+
+  // ---------- Input ----------
+  stage.addEventListener('pointerdown', e => {
+    if (!running || e.button > 0) return;
+    stage.setPointerCapture(e.pointerId);
+    const p = boardPoint(e);
+    drag = { a: p, b: p, id: e.pointerId };
+    updateSelection();
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.b = boardPoint(e); updateSelection();
+  });
+  stage.addEventListener('pointerup', e => { if (drag && e.pointerId === drag.id) endDrag(true); });
+  stage.addEventListener('pointercancel', () => endDrag(false));
+  window.addEventListener('resize', layout);
+
+  $('hintBtn').onclick = hint;
+  $('menuBtn').onclick = () => { if (running) { running = false; clearInterval(timer); } $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
+  $('againBtn').onclick = () => start();
+  $('homeBtn').onclick = () => { $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => start(b.dataset.mode));
+
+  function applySettings() {
+    document.documentElement.classList.toggle('light-tiles', light);
+    $('lightChk').checked = light; $('soundChk').checked = soundOn;
+    $('soundBtn').textContent = soundOn ? '🔊' : '🔇';
+  }
+  $('lightChk').onchange = e => { light = e.target.checked; store.set('light', light); applySettings(); };
+  $('soundChk').onchange = e => { soundOn = e.target.checked; store.set('sound', soundOn); applySettings(); };
+  $('soundBtn').onclick = () => { soundOn = !soundOn; store.set('sound', soundOn); applySettings(); };
+
+  // ---------- Custom fruit panel ----------
+  let fileTarget = null;
+  function saveCustom(backup) {
+    if (store.set('custom2', custom)) return true;
+    custom = backup;
+    alert('Không lưu được ảnh: bộ nhớ trình duyệt đã đầy. Hãy xoá bớt ảnh hoặc dùng ảnh nhỏ hơn.');
+    return false;
+  }
+
+  function slotEl(img, label, onPick, onRemove) {
+    const s = document.createElement('div');
+    s.className = 'slot' + (img ? ' has' : '');
+    if (img) s.style.backgroundImage = `url("${img}")`;
+    s.innerHTML = img ? '' : '+';
+    if (label) s.insertAdjacentHTML('beforeend', `<span class="n">${label}</span>`);
+    if (img) {
+      const x = Object.assign(document.createElement('span'), { className: 'x', textContent: '✕', title: 'Xoá ảnh' });
+      x.onclick = e => { e.stopPropagation(); onRemove(); };
+      s.appendChild(x);
+    }
+    s.onclick = onPick;
+    return s;
+  }
+
+  function renderCustomPanel() {
+    const pick = target => { fileTarget = target; $('fileIn').multiple = target.kind === 'pool'; $('fileIn').click(); };
+    const update = fn => { const backup = JSON.parse(JSON.stringify(custom)); fn(); if (saveCustom(backup)) { applyCustom(); renderCustomPanel(); } };
+    const bgSlot = $('bgSlot'); bgSlot.innerHTML = '';
+    const bs = slotEl(custom.bg, '', () => pick({ kind: 'bg' }), () => update(() => { custom.bg = null; }));
+    bs.classList.add('bg');
+    if (!custom.bg) bs.textContent = '+ Chọn ảnh nền';
+    bs.style.fontSize = '14px';
+    bgSlot.appendChild(bs);
+    $('bgOpts').classList.toggle('hidden', !custom.bg);
+    $('bgBlur').value = custom.bgBlur; $('bgDim').value = custom.bgDim; $('boardAlpha').value = custom.boardAlpha;
+    const pool = $('poolSlots'); pool.innerHTML = '';
+    custom.pool.forEach((img, i) => pool.appendChild(slotEl(img, '', () => pick({ kind: 'pool', i }),
+      () => update(() => custom.pool.splice(i, 1)))));
+    if (custom.pool.length < MAX_POOL) pool.appendChild(slotEl(null, '', () => pick({ kind: 'pool' })));
+    const nums = $('numSlots'); nums.innerHTML = '';
+    for (let v = 1; v <= 9; v++) nums.appendChild(slotEl(custom.per[v], v, () => pick({ kind: 'num', v }),
+      () => update(() => delete custom.per[v])));
+    $('numPos').value = custom.numPos; $('roundChk').checked = custom.round;
+    $('bgChk').checked = custom.removeBg; $('hideNumChk').checked = custom.hideNum;
+  }
+
+  $('fileIn').onchange = async e => {
+    const files = [...e.target.files].filter(f => f.type.startsWith('image/'));
+    e.target.value = '';
+    if (!files.length || !fileTarget) return;
+    const backup = JSON.parse(JSON.stringify(custom));
+    try {
+      if (fileTarget.kind === 'bg') custom.bg = await processBg(files[0]);
+      else {
+        const imgs = await Promise.all(files.map(processImage));
+        if (fileTarget.kind === 'num') custom.per[fileTarget.v] = imgs[0];
+        else if (fileTarget.i != null) custom.pool[fileTarget.i] = imgs[0];
+        else custom.pool = custom.pool.concat(imgs).slice(0, MAX_POOL);
+      }
+    } catch { alert('Không đọc được ảnh này, hãy thử ảnh khác (PNG/JPG/WebP).'); return; }
+    if (saveCustom(backup)) { applyCustom(); renderCustomPanel(); }
+  };
+
+  const setOpt = (k, v) => { custom[k] = v; store.set('custom2', custom); applyCustom(); };
+  $('numPos').onchange = e => setOpt('numPos', e.target.value);
+  $('roundChk').onchange = e => setOpt('round', e.target.checked);
+  $('bgChk').onchange = e => setOpt('removeBg', e.target.checked);
+  $('hideNumChk').onchange = e => setOpt('hideNum', e.target.checked);
+  ['bgBlur', 'bgDim', 'boardAlpha'].forEach(id => {
+    $(id).oninput = e => { custom[id] = +e.target.value; applyBg(); };
+    $(id).onchange = () => store.set('custom2', custom);
+  });
+  $('customReset').onclick = () => {
+    if (!confirm('Bỏ các ảnh đã tải lên và quay về bộ ảnh quả + ảnh bìa mặc định?')) return;
+    Object.assign(custom, defaultSkin()); store.set('custom2', custom); applyCustom(); renderCustomPanel();
+  };
+  $('customPlain').onclick = () => {
+    if (!confirm('Bỏ hết ảnh (kể cả ảnh mặc định) và dùng quả táo vẽ đơn giản?')) return;
+    Object.assign(custom, { pool: [], per: {}, bg: null, hideNum: false });
+    store.set('custom2', custom); applyCustom(); renderCustomPanel();
+  };
+  const openCustom = () => { endDrag(false); renderCustomPanel(); $('customOv').classList.remove('hidden'); };
+  $('customBtn').onclick = openCustom;
+  $('customBtn2').onclick = openCustom;
+  $('customDone').onclick = () => $('customOv').classList.add('hidden');
+
+  applySettings();
+  applyCustom();
+  $('best').textContent = store.get('best-classic', 0);
+  makeGrid(); buildBoard(); renderTime();
+})();
+</script>
+</body>
+</html>

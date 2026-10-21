@@ -192,6 +192,8 @@
   @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
   .tabs { display: flex; gap: 6px; justify-content: center; margin: 12px 0; }
   .tabs button.on { background: var(--accent); color: #fff; border-color: transparent; }
+  .tabs.sub { margin-top: -4px; }
+  .tabs.sub button { padding: 4px 12px; font-size: 14px; }
   .lb { list-style: none; margin: 0 0 16px; padding: 0; max-height: min(55vh, 420px); overflow: auto; text-align: left; }
   .lb li { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 10px; font-weight: 700; }
   .lb li:nth-child(odd) { background: var(--bg); }
@@ -350,6 +352,12 @@
     <div class="tabs">
       <button data-lb="classic">⏱ Cổ điển</button>
       <button data-lb="zen">🌿 Thư giãn</button>
+    </div>
+    <div class="tabs sub">
+      <button data-period="day">Hôm nay</button>
+      <button data-period="week">Tuần này</button>
+      <button data-period="month">Tháng này</button>
+      <button data-period="all">Mọi lúc</button>
     </div>
     <ol class="lb" id="lbList"></ol>
     <div class="row"><button class="primary" id="lbClose">Đóng</button></div>
@@ -766,11 +774,33 @@
       const t = await r.text();
       return t ? JSON.parse(t) : null;
     },
-    top: (m, n = 100) => lb.req(`leaderboard?mode=eq.${m}&select=name,score&order=score.desc,created_at.asc&limit=${n}`),
+    async top(m, n = 100, period = 'all') {
+      const since = periodStart(period);
+      if (!since) return lb.req(`leaderboard?mode=eq.${m}&select=name,score&order=score.desc,created_at.asc&limit=${n}`);
+      // Per-period: read raw scores since the period start and keep each name's best (first) entry
+      const rows = await lb.req(`scores?mode=eq.${m}&created_at=gte.${encodeURIComponent(since.toISOString())}` +
+        `&select=name,score&order=score.desc,created_at.asc&limit=2000`);
+      const seen = new Set(), out = [];
+      for (const x of rows) {
+        const k = x.name.trim().toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k); out.push({ name: x.name.trim(), score: x.score });
+        if (out.length >= n) break;
+      }
+      return out;
+    },
     add: (m, sc) => lb.req('scores', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ name: playerName, mode: m, score: sc }) })
   };
   const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  let lbMode = 'classic', lbReq = 0, endReq = 0;
+  // Start of the current day / week (Monday) / month in local time; null = all time
+  function periodStart(p) {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    if (p === 'day') return d;
+    if (p === 'week') { d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; }
+    if (p === 'month') { d.setDate(1); return d; }
+    return null;
+  }
+  let lbMode = 'classic', lbPeriod = store.get('lbPeriod', 'day'), lbReq = 0, endReq = 0;
 
   async function submitScore(m, sc) {
     const out = $('endRank'), id = ++endReq;
@@ -779,10 +809,11 @@
     out.textContent = 'Đang lưu lên bảng xếp hạng…';
     try {
       await lb.add(m, sc);
-      const rows = await lb.top(m);
+      const [day, all] = await Promise.all([lb.top(m, 100, 'day'), lb.top(m)]);
       if (id !== endReq) return;
-      const i = rows.findIndex(x => sameName(x.name, playerName));
-      out.textContent = i >= 0 ? `🏆 ${playerName} đang xếp hạng #${i + 1}` : '✓ Đã lưu kết quả lên bảng xếp hạng';
+      const rank = rows => rows.findIndex(x => sameName(x.name, playerName)) + 1;
+      const parts = [rank(day) && `#${rank(day)} hôm nay`, rank(all) && `#${rank(all)} mọi lúc`].filter(Boolean);
+      out.textContent = parts.length ? `🏆 ${playerName}: ${parts.join(' · ')}` : '✓ Đã lưu kết quả lên bảng xếp hạng';
     } catch {
       if (id === endReq) out.textContent = '⚠️ Không lưu được lên bảng xếp hạng (lỗi mạng)';
     }
@@ -796,14 +827,16 @@
   async function showLb(m) {
     lbMode = m || lbMode;
     document.querySelectorAll('[data-lb]').forEach(b => b.classList.toggle('on', b.dataset.lb === lbMode));
+    document.querySelectorAll('[data-period]').forEach(b => b.classList.toggle('on', b.dataset.period === lbPeriod));
     $('lbOv').classList.remove('hidden');
     if (!lb.on) return lbMsg('Bảng xếp hạng chưa được cấu hình.');
     lbMsg('Đang tải…');
     const id = ++lbReq;
     try {
-      const rows = await lb.top(lbMode, 50);
+      const rows = await lb.top(lbMode, 50, lbPeriod);
       if (id !== lbReq) return;
-      if (!rows.length) return lbMsg('Chưa có ai trên bảng — hãy là người đầu tiên!');
+      if (!rows.length) return lbMsg(lbPeriod === 'all' ? 'Chưa có ai trên bảng — hãy là người đầu tiên!'
+        : `Chưa có ai chơi ${{ day: 'hôm nay', week: 'tuần này', month: 'tháng này' }[lbPeriod]} — hãy là người đầu tiên!`);
       const list = $('lbList'); list.innerHTML = '';
       rows.forEach((x, i) => {
         const li = document.createElement('li');
@@ -819,6 +852,7 @@
 
   ['lbBtn', 'lbBtn2', 'lbBtn3'].forEach(id => $(id).onclick = () => { endDrag(false); showLb(running || id === 'lbBtn3' ? mode : null); });
   document.querySelectorAll('[data-lb]').forEach(b => b.onclick = () => showLb(b.dataset.lb));
+  document.querySelectorAll('[data-period]').forEach(b => b.onclick = () => { lbPeriod = b.dataset.period; store.set('lbPeriod', lbPeriod); showLb(); });
   $('lbClose').onclick = () => $('lbOv').classList.add('hidden');
 
   // ---------- Input ----------

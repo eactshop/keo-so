@@ -25,3 +25,23 @@ select distinct on (mode, lower(btrim(name)))
 from public.scores
 order by mode, lower(btrim(name)), score desc, created_at asc;
 grant select on public.leaderboard to anon, authenticated;
+
+-- BXH theo khoảng thời gian (p_since = null → mọi lúc), gộp theo tên:
+-- best = điểm cao nhất, total = tổng điểm đã chơi, plays = số ván.
+-- p_sort = 'best' hoặc 'total'.
+create index if not exists scores_mode_created_idx on public.scores (mode, created_at);
+create or replace function public.leaderboard_period(
+  p_mode text, p_since timestamptz default null, p_sort text default 'best', p_limit int default 50
+) returns table (name text, best int, total bigint, plays bigint)
+language sql stable security invoker as $$
+  select (array_agg(btrim(s.name) order by s.score desc, s.created_at))[1],
+         max(s.score), sum(s.score), count(*)
+  from public.scores s
+  where s.mode = p_mode and (p_since is null or s.created_at >= p_since)
+  group by lower(btrim(s.name))
+  order by case when p_sort = 'total' then sum(s.score) else max(s.score) end desc,
+           case when p_sort = 'total' then max(s.score) else sum(s.score) end desc,
+           min(s.created_at)
+  limit least(greatest(p_limit, 1), 200);
+$$;
+grant execute on function public.leaderboard_period(text, timestamptz, text, int) to anon, authenticated;

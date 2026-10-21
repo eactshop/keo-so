@@ -199,7 +199,12 @@
   .lb li:nth-child(odd) { background: var(--bg); }
   .lb li .rk { width: 32px; text-align: center; color: var(--muted); }
   .lb li .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lb li .sc { color: var(--accent); font-size: 18px; }
+  .lb li .sc { width: 84px; text-align: right; color: var(--muted); font-size: 16px; }
+  .lb li .sc.on { color: var(--accent); font-size: 18px; }
+  .lb li.head { position: sticky; top: 0; z-index: 1; background: var(--panel); font-size: 13px; color: var(--muted); }
+  .lb li.head .sc { font-size: 13px; }
+  .lb li.head .sort { cursor: pointer; text-decoration: underline dotted; }
+  .lb li.head .sort.on { color: var(--accent); text-decoration: none; }
   .lb li.me { box-shadow: inset 0 0 0 2px var(--good); }
   .lb li.msg { justify-content: center; color: var(--muted); font-weight: 500; background: none; }
   #endRank { font-weight: 700; color: var(--ink); }
@@ -774,21 +779,11 @@
       const t = await r.text();
       return t ? JSON.parse(t) : null;
     },
-    async top(m, n = 100, period = 'all') {
-      const since = periodStart(period);
-      if (!since) return lb.req(`leaderboard?mode=eq.${m}&select=name,score&order=score.desc,created_at.asc&limit=${n}`);
-      // Per-period: read raw scores since the period start and keep each name's best (first) entry
-      const rows = await lb.req(`scores?mode=eq.${m}&created_at=gte.${encodeURIComponent(since.toISOString())}` +
-        `&select=name,score&order=score.desc,created_at.asc&limit=2000`);
-      const seen = new Set(), out = [];
-      for (const x of rows) {
-        const k = x.name.trim().toLowerCase();
-        if (seen.has(k)) continue;
-        seen.add(k); out.push({ name: x.name.trim(), score: x.score });
-        if (out.length >= n) break;
-      }
-      return out;
-    },
+    // Rows of { name, best, total, plays } grouped per name — see leaderboard_period in supabase.sql
+    top: (m, n = 100, period = 'all', sort = 'best') => lb.req('rpc/leaderboard_period', {
+      method: 'POST',
+      body: JSON.stringify({ p_mode: m, p_since: periodStart(period)?.toISOString() ?? null, p_sort: sort, p_limit: n })
+    }),
     add: (m, sc) => lb.req('scores', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ name: playerName, mode: m, score: sc }) })
   };
   const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -800,7 +795,7 @@
     if (p === 'month') { d.setDate(1); return d; }
     return null;
   }
-  let lbMode = 'classic', lbPeriod = store.get('lbPeriod', 'day'), lbReq = 0, endReq = 0;
+  let lbMode = 'classic', lbPeriod = store.get('lbPeriod', 'day'), lbSort = store.get('lbSort', 'best'), lbReq = 0, endReq = 0;
 
   async function submitScore(m, sc) {
     const out = $('endRank'), id = ++endReq;
@@ -833,20 +828,33 @@
     lbMsg('Đang tải…');
     const id = ++lbReq;
     try {
-      const rows = await lb.top(lbMode, 50, lbPeriod);
+      const rows = await lb.top(lbMode, 50, lbPeriod, lbSort);
       if (id !== lbReq) return;
       if (!rows.length) return lbMsg(lbPeriod === 'all' ? 'Chưa có ai trên bảng — hãy là người đầu tiên!'
         : `Chưa có ai chơi ${{ day: 'hôm nay', week: 'tuần này', month: 'tháng này' }[lbPeriod]} — hãy là người đầu tiên!`);
       const list = $('lbList'); list.innerHTML = '';
+      const span = (c, t, title) => Object.assign(document.createElement('span'), { className: c, textContent: t, title: title || '' });
+      // Header: click "Cao nhất" / "Tổng điểm" to sort by that column
+      const head = document.createElement('li'); head.className = 'head';
+      head.append(span('rk', '#'), span('nm', 'Tên'));
+      [['best', 'Cao nhất'], ['total', 'Tổng điểm']].forEach(([k, t]) => {
+        const s = span('sc sort' + (k === lbSort ? ' on' : ''), t + (k === lbSort ? ' ▼' : ''), 'Sắp xếp theo ' + t.toLowerCase());
+        s.onclick = () => { if (lbSort !== k) { lbSort = k; store.set('lbSort', k); showLb(); } };
+        head.append(s);
+      });
+      list.appendChild(head);
       rows.forEach((x, i) => {
         const li = document.createElement('li');
         if (playerName && sameName(x.name, playerName)) li.className = 'me';
-        [['rk', ['🥇', '🥈', '🥉'][i] || i + 1], ['nm', x.name], ['sc', x.score]].forEach(([c, t]) =>
-          li.appendChild(Object.assign(document.createElement('span'), { className: c, textContent: t })));
+        li.append(span('rk', ['🥇', '🥈', '🥉'][i] || i + 1), span('nm', x.name),
+          span('sc' + (lbSort === 'best' ? ' on' : ''), x.best),
+          span('sc' + (lbSort === 'total' ? ' on' : ''), x.total, `${x.plays} ván`));
         list.appendChild(li);
       });
-    } catch {
-      if (id === lbReq) lbMsg('Không tải được bảng xếp hạng. Kiểm tra mạng rồi thử lại.');
+    } catch (e) {
+      if (id === lbReq) lbMsg(/HTTP 404/.test(e.message)
+        ? 'Bảng xếp hạng cần cập nhật: chạy lại file supabase.sql trên Supabase.'
+        : 'Không tải được bảng xếp hạng. Kiểm tra mạng rồi thử lại.');
     }
   }
 

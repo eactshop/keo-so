@@ -207,6 +207,22 @@
   .lb li.head .sort.on { color: var(--accent); text-decoration: none; }
   .lb li.me { box-shadow: inset 0 0 0 2px var(--good); }
   .lb li.msg { justify-content: center; color: var(--muted); font-weight: 500; background: none; }
+  .lb li .st { color: var(--muted); font-size: 13px; font-weight: 500; }
+  .lb li button { padding: 2px 12px; font-size: 14px; }
+  .stat.hidden { display: none; }
+  #oppStat { border-color: var(--accent); }
+  #oppStat small { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .soloBtn .dot { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 99px; background: var(--good); color: #fff; font-size: 13px; }
+  .soloBtn .dot:empty { display: none; }
+  #soloStatus:empty { display: none; }
+  #soloStatus.big { font-size: 64px; font-weight: 800; color: var(--accent); line-height: 1.2; margin: 8px 0; }
+  #inviteOv { z-index: 30; }
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); z-index: 40; opacity: 0;
+    background: var(--ink); color: var(--panel); padding: 8px 16px; border-radius: 12px; font-weight: 700;
+    pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100vw - 32px); text-align: center;
+  }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
   #endRank { font-weight: 700; color: var(--ink); }
   #endRank:empty { display: none; }
   .card.wide { max-width: 560px; max-height: calc(100vh - 32px); overflow: auto; text-align: left; }
@@ -255,6 +271,7 @@
     <div class="stat"><small>Điểm</small><span id="score">0</span></div>
     <div class="stat"><small id="timeLabel">Thời gian</small><span id="time">120</span></div>
     <div class="stat"><small>Kỷ lục</small><span id="best">0</span></div>
+    <div class="stat hidden" id="oppStat"><small id="oppName">Đối thủ</small><span id="oppScore">0</span></div>
   </div>
   <div class="tools">
     <button id="hintBtn" title="Gợi ý (−10 giây ở chế độ Cổ điển)">💡 Gợi ý</button>
@@ -285,6 +302,7 @@
     <div class="row">
       <button class="primary" data-mode="classic">⏱ Cổ điển · 2 phút</button>
       <button data-mode="zen">🌿 Thư giãn</button>
+      <button data-mode="solo" class="soloBtn">⚔️ Solo<span class="dot" id="onlineCount"></span></button>
     </div>
     <div class="opts">
       <label><input type="checkbox" id="lightChk"> Màu nhạt</label>
@@ -357,6 +375,7 @@
     <div class="tabs">
       <button data-lb="classic">⏱ Cổ điển</button>
       <button data-lb="zen">🌿 Thư giãn</button>
+      <button data-lb="solo">⚔️ Solo</button>
     </div>
     <div class="tabs sub">
       <button data-period="day">Hôm nay</button>
@@ -369,6 +388,34 @@
   </div>
 </div>
 
+<div class="overlay hidden" id="soloOv">
+  <div class="card">
+    <h2>⚔️ Solo 1 vs 1</h2>
+    <p>Mời một người đang online. Hai bạn chơi <b>cùng một bàn</b> trong 2 phút,
+      ai nhiều điểm hơn thắng: <b>thắng +1</b>, <b>thua −1</b> trên BXH Solo.</p>
+    <div id="soloStatus"></div>
+    <ol class="lb" id="onlineList"></ol>
+    <div class="row">
+      <button id="soloLb">🏆 BXH Solo</button>
+      <button class="primary" id="soloClose">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="inviteOv">
+  <div class="card">
+    <h2>⚔️ Lời mời solo</h2>
+    <p><b id="inviteFrom"></b> muốn solo với bạn!<br><small id="inviteLeft"></small></p>
+    <div class="row">
+      <button class="primary" id="inviteYes">✓ Nhận</button>
+      <button id="inviteNo">✕ Từ chối</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.76.1/dist/umd/supabase.js"></script>
 <script>
 (() => {
   const TIME = 120, HINT_COST = 10, SHUFFLE_COST = 10;
@@ -422,12 +469,12 @@
   };
 
   // ---------- Grid ----------
-  function makeGrid() {
-    grid = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 1 + Math.floor(Math.random() * 9)));
+  function makeGrid(rand = Math.random) {
+    grid = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 1 + Math.floor(rand() * 9)));
     // Make the total a multiple of 10 (like the original) so a perfect clear is theoretically possible
     let total = grid.flat().reduce((a, b) => a + b, 0);
     while (total % 10) {
-      const r = Math.floor(Math.random() * rows), c = Math.floor(Math.random() * cols);
+      const r = Math.floor(rand() * rows), c = Math.floor(rand() * cols);
       const need = total % 10, v = grid[r][c];
       if (v - need >= 1) { grid[r][c] -= need; total -= need; }
       else if (v + (10 - need) <= 9) { grid[r][c] += 10 - need; total += 10 - need; }
@@ -636,6 +683,7 @@
     });
     score += cells.length;
     $('score').textContent = score;
+    if (mode === 'solo') soloSend('score', { s: score });
     sfx.clear(cells.length);
     const p = document.createElement('div');
     p.className = 'popup'; p.textContent = '+' + cells.length;
@@ -680,7 +728,7 @@
   function manualShuffle() {
     if (!running) return;
     if (!shuffle()) return finish('stuck');
-    if (mode === 'classic') { timeLeft = Math.max(1, timeLeft - SHUFFLE_COST); renderTime(); }
+    if (mode !== 'zen') { timeLeft = Math.max(1, timeLeft - SHUFFLE_COST); renderTime(); }
   }
 
   // ---------- Hint / move search (2D prefix sums) ----------
@@ -717,7 +765,7 @@
     if (!m) return;
     for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++)
       if (grid[r][c]) { tiles[r][c].classList.add('hint'); hintCells.push(tiles[r][c]); }
-    if (mode === 'classic') { timeLeft = Math.max(1, timeLeft - HINT_COST); renderTime(); }
+    if (mode !== 'zen') { timeLeft = Math.max(1, timeLeft - HINT_COST); renderTime(); }
   }
 
   // ---------- Game flow ----------
@@ -730,21 +778,32 @@
     bar.classList.toggle('low', timeLeft <= 20);
   }
 
-  function start(m) {
+  // seed (solo only): both players build the same 10x17 board; portrait screens get it transposed,
+  // which keeps exactly the same set of moves
+  function start(m, seed) {
     mode = m || mode;
     const portrait = stage.clientHeight > stage.clientWidth * 1.1;
-    [rows, cols] = portrait ? [17, 10] : [10, 17];
+    if (seed) {
+      [rows, cols] = [10, 17]; makeGrid(seededRandom(seed));
+      if (portrait) { grid = grid[0].map((_, c) => grid.map(row => row[c])); [rows, cols] = [17, 10]; }
+    } else {
+      [rows, cols] = portrait ? [17, 10] : [10, 17]; makeGrid();
+    }
     score = 0; timeLeft = TIME; running = true;
     $('score').textContent = 0;
-    $('best').textContent = store.get('best-' + mode, 0);
+    $('best').textContent = store.get('best-' + (mode === 'zen' ? 'zen' : 'classic'), 0);
+    $('oppStat').classList.toggle('hidden', mode !== 'solo');
+    if (mode === 'solo') { $('oppName').textContent = solo.opp.name; $('oppScore').textContent = 0; }
+    $('againBtn').textContent = mode === 'solo' ? '⚔️ Solo tiếp' : '↻ Chơi lại';
     $('timeLabel').textContent = mode === 'zen' ? 'Thư giãn' : 'Thời gian';
     $('hintBtn').title = mode === 'zen' ? 'Gợi ý' : `Gợi ý (−${HINT_COST} giây)`;
     $('shuffleBtn').title = mode === 'zen' ? 'Xáo trộn' : `Xáo trộn (−${SHUFFLE_COST} giây)`;
     $('startOv').classList.add('hidden'); $('endOv').classList.add('hidden');
-    makeGrid(); buildBoard(); renderTime();
+    buildBoard(); renderTime();
     clearInterval(timer);
-    if (mode === 'classic') timer = setInterval(() => {
-      if (document.querySelector('#customOv:not(.hidden), #lbOv:not(.hidden)')) return; // paused while a panel is open
+    if (mode !== 'zen') timer = setInterval(() => {
+      // paused while a panel is open — except in solo, where the clock must match the opponent's
+      if (mode !== 'solo' && document.querySelector('#customOv:not(.hidden), #lbOv:not(.hidden)')) return;
       timeLeft -= 1; renderTime();
       if (timeLeft <= 10 && timeLeft > 0) sfx.warn();
       if (timeLeft <= 0) finish('time');
@@ -754,6 +813,7 @@
   function finish(reason) {
     if (!running) return;
     running = false; clearInterval(timer); endDrag(false); clearHint();
+    if (mode === 'solo') return soloFinished(reason);
     const key = 'best-' + mode, prev = store.get(key, 0), total = rows * cols;
     const isBest = score > prev;
     if (isBest) store.set(key, score);
@@ -783,6 +843,10 @@
     top: (m, n = 100, period = 'all', sort = 'best') => lb.req('rpc/leaderboard_period', {
       method: 'POST',
       body: JSON.stringify({ p_mode: m, p_since: periodStart(period)?.toISOString() ?? null, p_sort: sort, p_limit: n })
+    }),
+    // Rows of { name, points, wins, losses, draws } — see solo_leaderboard in supabase.sql
+    solo: (n = 50, period = 'all') => lb.req('rpc/solo_leaderboard', {
+      method: 'POST', body: JSON.stringify({ p_since: periodStart(period)?.toISOString() ?? null, p_limit: n })
     }),
     add: (m, sc) => lb.req('scores', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ name: playerName, mode: m, score: sc }) })
   };
@@ -828,15 +892,31 @@
     lbMsg('Đang tải…');
     const id = ++lbReq;
     try {
-      const rows = await lb.top(lbMode, 50, lbPeriod, lbSort);
+      const isSolo = lbMode === 'solo';
+      const rows = isSolo ? await lb.solo(50, lbPeriod) : await lb.top(lbMode, 50, lbPeriod, lbSort);
       if (id !== lbReq) return;
-      if (!rows.length) return lbMsg(lbPeriod === 'all' ? 'Chưa có ai trên bảng — hãy là người đầu tiên!'
-        : `Chưa có ai chơi ${{ day: 'hôm nay', week: 'tuần này', month: 'tháng này' }[lbPeriod]} — hãy là người đầu tiên!`);
+      if (!rows.length) return lbMsg(
+        (isSolo ? 'Chưa có trận solo nào' : 'Chưa có ai chơi') +
+        (lbPeriod === 'all' ? '' : ' ' + { day: 'hôm nay', week: 'tuần này', month: 'tháng này' }[lbPeriod]) +
+        ' — hãy là người đầu tiên!');
       const list = $('lbList'); list.innerHTML = '';
       const span = (c, t, title) => Object.assign(document.createElement('span'), { className: c, textContent: t, title: title || '' });
-      // Header: click "Cao nhất" / "Tổng điểm" to sort by that column
       const head = document.createElement('li'); head.className = 'head';
       head.append(span('rk', '#'), span('nm', 'Tên'));
+      if (isSolo) {
+        head.append(span('sc on', 'Điểm', 'Thắng +1, thua −1'), span('sc', 'Thắng–Thua'));
+        list.appendChild(head);
+        rows.forEach((x, i) => {
+          const li = document.createElement('li');
+          if (playerName && sameName(x.name, playerName)) li.className = 'me';
+          li.append(span('rk', ['🥇', '🥈', '🥉'][i] || i + 1), span('nm', x.name),
+            span('sc on', x.points > 0 ? '+' + x.points : x.points),
+            span('sc', `${x.wins}–${x.losses}`, x.draws ? `${x.draws} trận hoà` : ''));
+          list.appendChild(li);
+        });
+        return;
+      }
+      // Header: click "Cao nhất" / "Tổng điểm" to sort by that column
       [['best', 'Cao nhất'], ['total', 'Tổng điểm']].forEach(([k, t]) => {
         const s = span('sc sort' + (k === lbSort ? ' on' : ''), t + (k === lbSort ? ' ▼' : ''), 'Sắp xếp theo ' + t.toLowerCase());
         s.onclick = () => { if (lbSort !== k) { lbSort = k; store.set('lbSort', k); showLb(); } };
@@ -863,6 +943,242 @@
   document.querySelectorAll('[data-period]').forEach(b => b.onclick = () => { lbPeriod = b.dataset.period; store.set('lbPeriod', lbPeriod); showLb(); });
   $('lbClose').onclick = () => $('lbOv').classList.add('hidden');
 
+  // ---------- Solo 1v1 ----------
+  // Supabase Realtime: presence on a shared lobby channel = who's online; broadcast = invites.
+  // Each match gets its own channel for live scores. Both clients write the same result row
+  // (id = match id, duplicates ignored), so it is saved even if one of them closes the tab.
+  const INVITE_TTL = 20, SOLO_COUNTDOWN = 3;
+  const myKey = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const sb = lb.on && window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+  let lobby = null, online = [], outInvite = null, inInvite = null, solo = null;
+
+  function toast(text) {
+    const t = $('toast'); t.textContent = text; t.classList.add('on');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 3000);
+  }
+  // Deterministic RNG (string hash → mulberry32) so both players get the same board
+  function seededRandom(str) {
+    let a = 0;
+    for (let i = 0; i < str.length; i++) a = Math.imul(a ^ str.charCodeAt(i), 2654435761) + i | 0;
+    return () => {
+      a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  const lobbyState = () => ({ name: playerName, busy: !!solo });
+  const lobbySend = (event, payload) => lobby?.send({ type: 'broadcast', event, payload });
+  const soloSend = (event, payload) => solo?.ch?.send({ type: 'broadcast', event, payload });
+
+  function joinLobby() {
+    if (!sb || !playerName) return;
+    if (lobby) return void lobby.track(lobbyState());
+    lobby = sb.channel('keoso-lobby', { config: { presence: { key: myKey }, broadcast: { self: false } } });
+    lobby.on('presence', { event: 'sync' }, () => {
+      online = Object.entries(lobby.presenceState())
+        .filter(([k, metas]) => k !== myKey && metas.length && metas[metas.length - 1].name)
+        .map(([key, metas]) => ({ key, ...metas[metas.length - 1] }));
+      $('onlineCount').textContent = online.length || '';
+      renderOnline();
+    });
+    lobby.on('broadcast', { event: 'invite' }, ({ payload: p }) => { if (p.to === myKey) gotInvite(p); });
+    lobby.on('broadcast', { event: 'reply' }, ({ payload: p }) => { if (p.to === myKey) gotReply(p); });
+    lobby.on('broadcast', { event: 'cancel' }, ({ payload: p }) => { if (p.to === myKey && inInvite?.id === p.id) closeInvite(); });
+    lobby.subscribe(st => { if (st === 'SUBSCRIBED') lobby.track(lobbyState()); });
+  }
+
+  function soloStatus(text, big) {
+    $('soloStatus').textContent = text;
+    $('soloStatus').classList.toggle('big', !!big);
+    $('onlineList').hidden = !!solo;
+  }
+
+  function renderOnline() {
+    const list = $('onlineList');
+    if ($('soloOv').classList.contains('hidden')) return;
+    list.innerHTML = '';
+    const add = (...els) => { const li = document.createElement('li'); li.append(...els); list.appendChild(li); return li; };
+    const span = (c, t) => Object.assign(document.createElement('span'), { className: c, textContent: t });
+    if (!sb) return void (add(span('', 'Chế độ solo cần mạng — không tải được máy chủ.')).className = 'msg');
+    if (!online.length) return void (add(span('', 'Chưa có ai khác online. Gửi link game cho bạn bè để solo nhé!')).className = 'msg');
+    online.forEach(p => {
+      if (p.busy) return add(span('nm', p.name), span('st', 'đang solo'));
+      if (sameName(p.name, playerName)) return add(span('nm', p.name), span('st', 'trùng tên bạn'));
+      const b = document.createElement('button');
+      b.textContent = outInvite?.to === p.key ? 'Đang chờ…' : 'Mời';
+      b.disabled = !!(outInvite || solo);
+      b.onclick = () => sendInvite(p);
+      add(span('nm', p.name), b);
+    });
+  }
+
+  function openSolo() {
+    joinLobby();
+    $('startOv').classList.add('hidden'); $('endOv').classList.add('hidden');
+    $('soloOv').classList.remove('hidden');
+    if (!solo) soloStatus('');
+    renderOnline();
+  }
+
+  function sendInvite(p) {
+    if (outInvite || solo) return;
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    outInvite = { id, to: p.key, name: p.name };
+    lobbySend('invite', { id, to: p.key, from: myKey, name: playerName });
+    outInvite.t = setTimeout(() => {
+      if (outInvite?.id !== id) return;
+      lobbySend('cancel', { id, to: p.key });
+      toast(`${p.name} không trả lời`);
+      outInvite = null; renderOnline();
+    }, INVITE_TTL * 1000);
+    renderOnline();
+  }
+
+  function gotReply(p) {
+    if (outInvite?.id !== p.id) return;
+    clearTimeout(outInvite.t);
+    const o = outInvite; outInvite = null;
+    if (p.ok) startSolo(o.id, true, { key: p.from, name: p.name || o.name });
+    else { toast(p.busy ? `${o.name} đang bận` : `${o.name} đã từ chối`); renderOnline(); }
+  }
+
+  function gotInvite(p) {
+    if (solo || inInvite) return lobbySend('reply', { id: p.id, to: p.from, from: myKey, ok: false, busy: true });
+    inInvite = p;
+    $('inviteFrom').textContent = p.name;
+    let left = INVITE_TTL;
+    const tick = () => {
+      if (left <= 0) return answerInvite(false);
+      $('inviteLeft').textContent = `Tự từ chối sau ${left--} giây`;
+    };
+    tick(); p.t = setInterval(tick, 1000);
+    $('inviteOv').classList.remove('hidden');
+    sfx.warn();
+  }
+
+  function closeInvite() {
+    if (inInvite) clearInterval(inInvite.t);
+    inInvite = null; $('inviteOv').classList.add('hidden');
+  }
+
+  function answerInvite(ok) {
+    const p = inInvite;
+    if (!p) return;
+    closeInvite();
+    lobbySend('reply', { id: p.id, to: p.from, from: myKey, name: playerName, ok });
+    if (ok) startSolo(p.id, false, { key: p.from, name: p.name });
+  }
+
+  function startSolo(id, host, opp) {
+    if (outInvite) { clearTimeout(outInvite.t); lobbySend('cancel', { id: outInvite.id, to: outInvite.to }); outInvite = null; }
+    if (running) { running = false; clearInterval(timer); endDrag(false); clearHint(); } // abandon a single-player game in progress
+    ['startOv', 'endOv', 'lbOv', 'customOv'].forEach(o => $(o).classList.add('hidden'));
+    const s = solo = { id, host, opp, oppScore: 0, myFinal: null, oppFinal: null, started: false, done: false };
+    lobby?.track(lobbyState());
+    $('soloOv').classList.remove('hidden');
+    soloStatus(`Đang kết nối với ${opp.name}…`);
+    const ch = s.ch = sb.channel('keoso-solo-' + id, { config: { presence: { key: myKey }, broadcast: { self: false } } });
+    ch.on('presence', { event: 'sync' }, () => {
+      if (solo !== s) return;
+      const here = opp.key in ch.presenceState();
+      if (here) { clearTimeout(s.leaveT); s.leaveT = null; }
+      // The host starts both countdowns with one message, so the two clocks line up
+      if (here && !s.cd) { if (host) { soloSend('go', {}); countdown(s); } }
+      else if (!here && s.cd && !s.started) { toast(`${opp.name} đã rời trận`); endSolo(s); openSolo(); }
+      // Opponent gone before sending a final score: short grace period for a reconnect, then they forfeit
+      else if (!here && s.started && s.oppFinal == null && !s.leaveT)
+        s.leaveT = setTimeout(() => { if (solo === s && s.oppFinal == null) oppForfeit(s); }, 5000);
+    });
+    ch.on('broadcast', { event: 'go' }, () => { if (solo === s && !s.cd) countdown(s); });
+    ch.on('broadcast', { event: 'score' }, ({ payload }) => {
+      if (solo !== s || s.oppFinal != null) return;
+      s.oppScore = payload.s; $('oppScore').textContent = payload.s;
+    });
+    ch.on('broadcast', { event: 'final' }, ({ payload }) => {
+      if (solo !== s) return;
+      s.oppScore = s.oppFinal = payload.s; $('oppScore').textContent = payload.s;
+      if (running) toast(`${opp.name} đã xong: ${payload.s} điểm`);
+      settle(s);
+    });
+    ch.subscribe(st => { if (st === 'SUBSCRIBED') ch.track({ name: playerName }); });
+    s.wait = setTimeout(() => {
+      if (solo === s && !s.cd) { toast(`Không kết nối được với ${opp.name}`); endSolo(s); openSolo(); }
+    }, 15000);
+  }
+
+  function countdown(s) {
+    clearTimeout(s.wait);
+    let n = SOLO_COUNTDOWN;
+    const step = () => {
+      if (solo !== s) return;
+      if (n > 0) { soloStatus(n--, true); sfx.tick(); s.cd = setTimeout(step, 1000); return; }
+      s.started = true;
+      $('soloOv').classList.add('hidden'); soloStatus('');
+      start('solo', s.id);
+    };
+    s.cd = true; step();
+  }
+
+  function soloFinished(reason) {
+    const s = solo;
+    $('endReason').textContent = { time: '⏰ Hết giờ!', stuck: '🤔 Hết nước đi!', perfect: '🏆 Dọn sạch bàn!', forfeit: '🏳️ Đối thủ đã rời trận' }[reason];
+    $('endScore').textContent = score;
+    $('endInfo').textContent = '';
+    sfx.end();
+    setTimeout(() => $('endOv').classList.remove('hidden'), 400);
+    if (!s) return void ($('endRank').textContent = '');
+    s.myFinal = score;
+    soloSend('final', { s: score });
+    $('endRank').textContent = `Đang chờ ${s.opp.name} chơi xong…`;
+    settle(s);
+  }
+
+  function oppForfeit(s) {
+    s.oppFinal = s.oppScore; s.forfeit = true;
+    if (running) finish('forfeit'); else settle(s);
+  }
+
+  async function settle(s) {
+    if (s.done || s.myFinal == null || s.oppFinal == null) return;
+    s.done = true;
+    const me = s.myFinal, op = s.oppFinal, res = s.forfeit ? 1 : Math.sign(me - op);
+    $('endReason').textContent = res > 0 ? '🏆 Bạn thắng!' : res < 0 ? '😢 Bạn thua!' : '🤝 Hoà!';
+    $('endInfo').textContent = `Bạn ${me} – ${op} ${s.opp.name}` + (s.forfeit ? ' (đối thủ bỏ trận)' : '');
+    $('endRank').textContent = res > 0 ? '+1 điểm solo' : res < 0 ? '−1 điểm solo' : 'Hoà: không cộng, không trừ';
+    const [p1, p2, s1, s2] = s.host ? [playerName, s.opp.name, me, op] : [s.opp.name, playerName, op, me];
+    const winner = res === 0 ? null : (res > 0) === s.host ? 1 : 2;
+    try {
+      await lb.req('solo_matches?on_conflict=id', {
+        method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify({ id: s.id, p1, p2, s1, s2, winner, forfeit: !!s.forfeit })
+      });
+    } catch (e) {
+      $('endRank').textContent += /HTTP 404/.test(e.message)
+        ? ' (⚠️ chưa lưu được: cần chạy lại supabase.sql)' : ' (⚠️ không lưu được kết quả)';
+    }
+    endSolo(s);
+  }
+
+  function endSolo(s = solo) {
+    if (!s || solo !== s) return;
+    clearTimeout(s.wait); clearTimeout(s.cd); clearTimeout(s.leaveT);
+    if (s.ch) sb.removeChannel(s.ch);
+    solo = null;
+    lobby?.track(lobbyState());
+    soloStatus('');
+  }
+
+  $('inviteYes').onclick = () => answerInvite(true);
+  $('inviteNo').onclick = () => answerInvite(false);
+  $('soloClose').onclick = () => {
+    if (solo && !solo.started) endSolo(); // cancel while connecting / counting down
+    $('soloOv').classList.add('hidden');
+    if (!running) $('startOv').classList.remove('hidden');
+  };
+  $('soloLb').onclick = () => { $('soloOv').classList.add('hidden'); showLb('solo'); };
+
   // ---------- Input ----------
   stage.addEventListener('pointerdown', e => {
     if (!running || e.button > 0) return;
@@ -881,8 +1197,15 @@
 
   $('hintBtn').onclick = hint;
   $('shuffleBtn').onclick = manualShuffle;
-  $('menuBtn').onclick = () => { if (running) { running = false; clearInterval(timer); } $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
-  $('againBtn').onclick = () => start();
+  $('menuBtn').onclick = () => {
+    if (running && mode === 'solo') {
+      if (!confirm('Rời trận bây giờ sẽ bị xử thua (−1 điểm solo). Vẫn rời?')) return;
+      running = false; clearInterval(timer); endDrag(false); endSolo();
+    }
+    if (running) { running = false; clearInterval(timer); }
+    $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden');
+  };
+  $('againBtn').onclick = () => mode === 'solo' ? openSolo() : start();
   $('homeBtn').onclick = () => { $('endOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
   const nameIn = $('nameIn');
   nameIn.value = playerName;
@@ -897,7 +1220,8 @@
       return;
     }
     playerName = nameIn.value = n; store.set('name', n);
-    start(b.dataset.mode);
+    joinLobby();
+    if (b.dataset.mode === 'solo') openSolo(); else start(b.dataset.mode);
   });
 
   function applySettings() {
@@ -999,6 +1323,7 @@
   applyCustom();
   $('best').textContent = store.get('best-classic', 0);
   makeGrid(); buildBoard(); renderTime();
+  joinLobby();
 })();
 </script>
 </body>

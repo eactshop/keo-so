@@ -45,3 +45,46 @@ language sql stable security invoker as $$
   limit least(greatest(p_limit, 1), 200);
 $$;
 grant execute on function public.leaderboard_period(text, timestamptz, text, int) to anon, authenticated;
+
+-- ---------- Solo 1v1 ----------
+-- Mỗi trận một dòng; p1 = người mời, p2 = người nhận. winner: 1 / 2, null = hoà.
+-- Thắng +1 điểm, thua −1 điểm, hoà 0.
+create table if not exists public.solo_matches (
+  id text primary key check (char_length(id) between 8 and 40),
+  p1 text not null check (char_length(btrim(p1)) between 1 and 20),
+  p2 text not null check (char_length(btrim(p2)) between 1 and 20),
+  s1 int not null check (s1 between 0 and 170),
+  s2 int not null check (s2 between 0 and 170),
+  winner smallint check (winner in (1, 2)),
+  forfeit boolean not null default false, -- true = một bên bỏ trận
+  created_at timestamptz not null default now(),
+  check (lower(btrim(p1)) <> lower(btrim(p2)))
+);
+create index if not exists solo_matches_created_idx on public.solo_matches (created_at);
+
+alter table public.solo_matches enable row level security;
+drop policy if exists "public read" on public.solo_matches;
+create policy "public read" on public.solo_matches for select to anon, authenticated using (true);
+drop policy if exists "public insert" on public.solo_matches;
+create policy "public insert" on public.solo_matches for insert to anon, authenticated with check (true);
+grant select, insert on public.solo_matches to anon, authenticated;
+
+-- BXH solo theo khoảng thời gian (p_since = null → mọi lúc), gộp theo tên
+create or replace function public.solo_leaderboard(p_since timestamptz default null, p_limit int default 50)
+returns table (name text, points bigint, wins bigint, losses bigint, draws bigint)
+language sql stable security invoker as $$
+  with t as (
+    select btrim(p1) as name, created_at, case winner when 1 then 1 when 2 then -1 else 0 end as d
+    from public.solo_matches where p_since is null or created_at >= p_since
+    union all
+    select btrim(p2), created_at, case winner when 2 then 1 when 1 then -1 else 0 end
+    from public.solo_matches where p_since is null or created_at >= p_since
+  )
+  select (array_agg(t.name order by t.created_at desc))[1], sum(t.d),
+         count(*) filter (where t.d = 1), count(*) filter (where t.d = -1), count(*) filter (where t.d = 0)
+  from t
+  group by lower(t.name)
+  order by sum(t.d) desc, count(*) filter (where t.d = 1) desc, count(*) asc
+  limit least(greatest(p_limit, 1), 200);
+$$;
+grant execute on function public.solo_leaderboard(timestamptz, int) to anon, authenticated;

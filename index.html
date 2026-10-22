@@ -190,7 +190,7 @@
   .namebox small { display: block; color: #e5484d; font-size: 14px; margin-top: 4px; }
   .namebox small:empty { display: none; }
   @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-  .tabs { display: flex; gap: 6px; justify-content: center; margin: 12px 0; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 12px 0; }
   .tabs button.on { background: var(--accent); color: #fff; border-color: transparent; }
   .tabs.sub { margin-top: -4px; }
   .tabs.sub button { padding: 4px 12px; font-size: 14px; }
@@ -301,6 +301,7 @@
     </div>
     <div class="row">
       <button class="primary" data-mode="classic">⏱ Cổ điển · 2 phút</button>
+      <button data-mode="full" title="Bàn to 14×24 quả, 2 phút 30 giây, toàn màn hình">🖥️ Full màn · 2:30</button>
       <button data-mode="zen">🌿 Thư giãn</button>
       <button data-mode="solo" class="soloBtn">⚔️ Solo<span class="dot" id="onlineCount"></span></button>
     </div>
@@ -374,6 +375,7 @@
     <h2>🏆 Bảng xếp hạng</h2>
     <div class="tabs">
       <button data-lb="classic">⏱ Cổ điển</button>
+      <button data-lb="full">🖥️ Full màn</button>
       <button data-lb="zen">🌿 Thư giãn</button>
       <button data-lb="solo">⚔️ Solo</button>
     </div>
@@ -418,7 +420,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.76.1/dist/umd/supabase.js"></script>
 <script>
 (() => {
-  const TIME = 120, HINT_COST = 10, SHUFFLE_COST = 10;
+  const HINT_COST = 10, SHUFFLE_COST = 10;
+  // Per-mode time (seconds; zen has none) and landscape board size — portrait screens get it transposed
+  const timeFor = m => m === 'full' ? 150 : 120;
+  const sizeFor = m => m === 'full' ? [14, 24] : [10, 17];
   const $ = id => document.getElementById(id);
   // Shared leaderboard (Supabase). Paste the project URL and anon/publishable key here — see supabase.sql
   const SB_URL = 'https://cjosqwduvymukkbgahpi.supabase.co', SB_KEY = 'sb_publishable_8_4YcYAOgl16ywXbT3OqKA_jOKZFskg';
@@ -440,7 +445,7 @@
 
   let rows = 10, cols = 17, cell = 40, pad = 10;
   let grid = [], tiles = [];
-  let mode = 'classic', score = 0, timeLeft = TIME, timer = null, running = false;
+  let mode = 'classic', score = 0, timeLeft = timeFor(mode), timer = null, running = false;
   let drag = null, selected = [], hintCells = [];
   let soundOn = store.get('sound', true);
   let light = store.get('light', false);
@@ -774,7 +779,7 @@
     if (mode === 'zen') { $('time').textContent = '∞'; bar.classList.add('hidden'); return; }
     bar.classList.remove('hidden');
     $('time').textContent = Math.ceil(timeLeft);
-    bar.querySelector('i').style.width = (timeLeft / TIME * 100) + '%';
+    bar.querySelector('i').style.width = (timeLeft / timeFor(mode) * 100) + '%';
     bar.classList.toggle('low', timeLeft <= 20);
   }
 
@@ -783,15 +788,18 @@
   function start(m, seed) {
     mode = m || mode;
     const portrait = stage.clientHeight > stage.clientWidth * 1.1;
+    const [h, w] = sizeFor(mode);
     if (seed) {
-      [rows, cols] = [10, 17]; makeGrid(seededRandom(seed));
-      if (portrait) { grid = grid[0].map((_, c) => grid.map(row => row[c])); [rows, cols] = [17, 10]; }
+      [rows, cols] = [h, w]; makeGrid(seededRandom(seed));
+      if (portrait) { grid = grid[0].map((_, c) => grid.map(row => row[c])); [rows, cols] = [w, h]; }
     } else {
-      [rows, cols] = portrait ? [17, 10] : [10, 17]; makeGrid();
+      [rows, cols] = portrait ? [w, h] : [h, w]; makeGrid();
     }
-    score = 0; timeLeft = TIME; running = true;
+    // Full-board mode also takes over the whole screen where the browser allows it (not iPhone Safari)
+    if (mode === 'full' && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+    score = 0; timeLeft = timeFor(mode); running = true;
     $('score').textContent = 0;
-    $('best').textContent = store.get('best-' + (mode === 'zen' ? 'zen' : 'classic'), 0);
+    $('best').textContent = store.get('best-' + (mode === 'solo' ? 'classic' : mode), 0);
     $('oppStat').classList.toggle('hidden', mode !== 'solo');
     if (mode === 'solo') { $('oppName').textContent = solo.opp.name; $('oppScore').textContent = 0; }
     $('againBtn').textContent = mode === 'solo' ? '⚔️ Solo tiếp' : '↻ Chơi lại';

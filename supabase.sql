@@ -10,6 +10,12 @@ create table if not exists public.scores (
 );
 create index if not exists scores_mode_score_idx on public.scores (mode, score desc);
 
+-- Chế độ Full màn: bàn 14x24 = tối đa 336 quả (cập nhật ràng buộc cho bảng đã tạo từ trước)
+alter table public.scores drop constraint if exists scores_mode_check;
+alter table public.scores add constraint scores_mode_check check (mode in ('classic', 'zen', 'full'));
+alter table public.scores drop constraint if exists scores_score_check;
+alter table public.scores add constraint scores_score_check check (score between 1 and 336);
+
 -- Ai cũng được xem và gửi điểm; không ai được sửa/xoá qua API
 alter table public.scores enable row level security;
 drop policy if exists "public read" on public.scores;

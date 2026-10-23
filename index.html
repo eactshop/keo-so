@@ -301,7 +301,7 @@
     </div>
     <div class="row">
       <button class="primary" data-mode="classic">⏱ Cổ điển · 2 phút</button>
-      <button data-mode="full" title="Bàn to 14×24 quả, 2 phút 30 giây, toàn màn hình">🖥️ Full màn · 2:30</button>
+      <button data-mode="full" title="Bàn to 14×24 quả, 3 phút, toàn màn hình">🖥️ Full màn · 3 phút</button>
       <button data-mode="zen">🌿 Thư giãn</button>
       <button data-mode="solo" class="soloBtn">⚔️ Solo<span class="dot" id="onlineCount"></span></button>
     </div>
@@ -422,7 +422,7 @@
 (() => {
   const HINT_COST = 10, SHUFFLE_COST = 10;
   // Per-mode time (seconds; zen has none) and landscape board size — portrait screens get it transposed
-  const timeFor = m => m === 'full' ? 150 : 120;
+  const timeFor = m => m === 'full' ? 180 : 120;
   const sizeFor = m => m === 'full' ? [14, 24] : [10, 17];
   const $ = id => document.getElementById(id);
   // Shared leaderboard (Supabase). Paste the project URL and anon/publishable key here — see supabase.sql
